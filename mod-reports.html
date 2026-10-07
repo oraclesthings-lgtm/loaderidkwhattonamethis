@@ -127,6 +127,11 @@ select{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding
 .row.acc{align-items:center}
 .row.acc b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 #fw{position:relative}
+.shot{cursor:zoom-in}
+#zm{position:fixed;inset:0;z-index:50;background:#000d;overflow:hidden;cursor:grab;touch-action:none;animation:zin .18s ease-out}
+#zm img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;user-select:none;-webkit-user-drag:none}
+#zm .zb{position:fixed;top:12px;right:12px;display:flex;gap:6px;z-index:51}
+#zm small{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);color:#ffffffaa}
 .pop{position:absolute;top:calc(100% + 6px);left:0;min-width:210px;max-height:300px;overflow:auto;z-index:20;padding:6px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,#151c2e,#0d121d);box-shadow:0 12px 30px #000a}
 .pop .it{display:block;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:8px 10px}
 .pop .it:hover{background:#ffffff12}
@@ -262,6 +267,31 @@ function renderAfr(main){
         h('small',{textContent:(r.word?`Flagged: ${r.word}`:'')+(pend[r.k]?' (deleting soon)':'')}),h('div',{className:'msg',textContent:r.text})))));
   }}
 
+function openZoom(src){
+  const img=h('img',{src,draggable:false}),box=h('div',{id:'zm'});
+  let sc=1,x=0,y=0,fit=1,drag=null;
+  const ap=()=>{img.style.transform=`translate(${x}px,${y}px) scale(${sc})`};
+  const reset=()=>{fit=Math.min(innerWidth*.92/img.naturalWidth,innerHeight*.92/img.naturalHeight);sc=fit;x=(innerWidth-img.naturalWidth*sc)/2;y=(innerHeight-img.naturalHeight*sc)/2;ap()};
+  const zoomAt=(f,cx,cy)=>{const n=Math.min(Math.max(sc*f,fit*.5),fit*20);x=cx-(cx-x)*n/sc;y=cy-(cy-y)*n/sc;sc=n;ap()};
+  const close=()=>{box.remove();removeEventListener('keydown',key,true)};
+  const key=e=>{if(e.key==='Escape'){e.stopImmediatePropagation();close()}else if(e.key==='+'||e.key==='=')zoomAt(1.25,innerWidth/2,innerHeight/2);else if(e.key==='-')zoomAt(.8,innerWidth/2,innerHeight/2);else if(e.key==='0')reset()};
+  img.onload=reset;
+  box.onwheel=e=>{e.preventDefault();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX,e.clientY)};
+  const pts=new Map();let pinch=null;
+  box.onpointerdown=e=>{if(e.target.closest('.zb'))return;box.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});drag={x:e.clientX,y:e.clientY,moved:false};box.style.cursor='grabbing'};
+  box.onpointermove=e=>{if(!pts.has(e.pointerId))return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const[a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y),cx=(a.x+b.x)/2,cy=(a.y+b.y)/2;if(pinch)zoomAt(d/pinch,cx,cy);pinch=d;drag.moved=true;return}
+    if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;x+=dx;y+=dy;drag.x=e.clientX;drag.y=e.clientY;ap()}};
+  box.onpointerup=box.onpointercancel=e=>{pts.delete(e.pointerId);if(pts.size<2)pinch=null;box.style.cursor='grab';
+    if(drag&&!drag.moved&&e.target===box&&!pts.size)close();if(!pts.size)drag=null};
+  box.ondblclick=e=>{if(e.target===img)sc>fit*1.5?reset():zoomAt(2.5,e.clientX,e.clientY)};
+  box.append(img,h('div',{className:'zb'},
+    h('button',{textContent:'+',title:'Zoom in',onclick:()=>zoomAt(1.25,innerWidth/2,innerHeight/2)}),
+    h('button',{textContent:'−',title:'Zoom out',onclick:()=>zoomAt(.8,innerWidth/2,innerHeight/2)}),
+    h('button',{textContent:'Fit',onclick:reset}),
+    h('button',{textContent:'✕',title:'Close',onclick:close})),
+    h('small',{textContent:'Scroll or pinch to zoom · drag to move · double-click to zoom · Esc to close'}));
+  document.body.append(box);addEventListener('keydown',key,true);if(img.complete&&img.naturalWidth)reset()}
 function openSide(k){sel=k;document.body.classList.add('open');render();paintSide()}
 function closeSide(){clearInterval(T);sel=null;document.body.classList.remove('open');$('#side').replaceChildren();render()}
 
@@ -270,7 +300,7 @@ function paintSide(){
   const r=D[sel];if(!r)return;
   const src=r.image||r.imageUrl||'';
   const img=/^(data:image\/|https:\/\/)/.test(src)
-    ?h('img',{className:'shot',src,referrerPolicy:'no-referrer',onerror(){this.replaceWith(h('div',{className:'noimg',textContent:'Image failed to load'}))}})
+    ?h('img',{className:'shot',src,referrerPolicy:'no-referrer',title:'Click to zoom',onclick:()=>openZoom(src),onerror(){this.replaceWith(h('div',{className:'noimg',textContent:'Image failed to load'}))}})
     :h('div',{className:'noimg',textContent:'Loading image...'});
   const f=(l,v)=>h('div',{className:'f'},h('small',{textContent:l}),h('span',{className:'v',textContent:v??'-'}));
   const sb=(st,cls,txt,tip)=>h('button',{className:`sb ${cls}${r.status===st?' on':''}`,textContent:txt,title:tip,onclick:()=>setStatus(st)});
@@ -292,7 +322,7 @@ function paintSide(){
   if(!src){const id=sel;
     api('/images/'+id).then(d=>{
       const b=$('#side .noimg');if(sel!==id||!b)return;
-      if(typeof d==='string'&&d.startsWith('data:image/'))b.replaceWith(h('img',{className:'shot',src:d}));
+      if(typeof d==='string'&&d.startsWith('data:image/'))b.replaceWith(h('img',{className:'shot',src:d,title:'Click to zoom',onclick:()=>openZoom(d)}));
       else b.textContent='No image'
     }).catch(()=>{const b=$('#side .noimg');if(sel===id&&b)b.textContent='No image'})}}
 
@@ -449,6 +479,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['1.6.1','2026-10-07',['Click a report image to open it full screen: scroll or pinch to zoom, drag to move, double-click to zoom in']],
   ['1.6','2026-10-07',['Launcher tab: launch Roblox Account Manager accounts into place 12880465992','Auto-Call Bot when down: relaunches the bot when it disconnects or stops checking in','Bot status (online, hopping, disconnected) from the scanner','Typing in a box is no longer wiped by the auto-refresh']],
   ['1.5.2','2026-10-07',['Avatar heads now load through the Roblox thumbnail API']],
   ['1.5.1','2026-10-07',['Fixed: reopening a report now takes it off your stats (a report counts once, for whoever handled it last)']],
