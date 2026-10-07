@@ -111,6 +111,7 @@ body.open aside{transform:none}
 .sb.on.ai{background:linear-gradient(135deg,#c99a14,#7a5a0c);border-color:#f0c040}
 .stat.y{background:linear-gradient(145deg,#5a4510,#0f1522)}
 .row.a-ai{border-left-color:#e0b020}
+.wd{margin-top:10px;font-family:Wingdings,'Wingdings 2','Wingdings 3',sans-serif;font-size:18px;letter-spacing:2px;color:var(--mu)}
 .cl{margin:0;padding-left:18px;display:grid;gap:4px}
 .ok{color:#4bd18b}
 .bad{color:#ff9a9a}
@@ -213,7 +214,7 @@ function groups(ff){
   return Object.entries(m).map(([id,list])=>{list.sort((a,b)=>a.k<b.k?1:-1);return{id,list,name:list[0].displayName,user:list[0].username}})
     .sort((a,b)=>a.list[0].k<b.list[0].k?1:-1)}
 
-function go(v){view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(st)loadStats().then(render);if(v==='launch')loadLauncher().then(render)}
+function go(v){view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(st)loadStats().then(render);if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
 function paintNav(){
   const open=Object.values(D).filter(r=>!r.status).length;
   $('#nav').replaceChildren(h('div',{className:'brand',textContent:'Mod Reports'}),
@@ -432,44 +433,64 @@ function renderAi(main){
 const busy=()=>{const a=document.activeElement;return!!(a&&a.closest&&a.closest('#main')&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)&&a.type!=='checkbox')};
 const ago=t=>{if(!t)return'never';const x=Math.max(0,Math.round((Date.now()-t)/1000));return x<60?x+'s ago':x<3600?Math.round(x/60)+'m ago':Math.round(x/3600)+'h ago'};
 const BST={ok:['Online','ok'],hopping:['Hopping servers','ok'],disconnected:['Disconnected','bad'],stopped:['Stopped by hand','mu']};
+let lSel=new Set(),bOpen=false,bAnim=false,lAnim=false;
 async function loadLauncher(){
   try{
-    const[status,settings,accounts,lg]=await Promise.all([api('/launcher/status'),api('/launcher/settings'),api('/launcher/accounts'),api('/launcher/log','GET',undefined,'orderBy=%22%24key%22&limitToLast=20')]);
-    LCH={status:status||{},settings:settings||{},accounts:accounts||{},log:lg||{}};
-    BOT=LCH.settings.bot?(await api('/bot/'+LCH.settings.bot.toLowerCase())||{}):{}
+    const[status,settings,accounts,lg,bots]=await Promise.all([api('/launcher/status'),api('/launcher/settings'),api('/launcher/accounts'),api('/launcher/log','GET',undefined,'orderBy=%22%24key%22&limitToLast=20'),api('/bot')]);
+    LCH={status:status||{},settings:settings||{},accounts:accounts||{},log:lg||{}};BOT=bots||{}
   }catch(e){LCH={err:e.message};BOT={}}}
 async function setLaunch(o){try{await api('/launcher/settings','PATCH',o);Object.assign(LCH.settings??={},o);await loadLauncher();render()}catch(e){alert(e.message)}}
+const botMap=set=>set.bots||(set.bot?{[set.bot.toLowerCase()]:set.bot}:{});
+function botStatus(n){
+  const b=BOT[n.toLowerCase()];
+  if(!b||!b.t)return['No signal yet','bad'];
+  const[t,c]=Date.now()-b.t>120000&&b.state!=='stopped'?['No signal','bad']:(BST[b.state]||[String(b.state),'mu']);
+  return[`${t} · ${ago(b.t)}`,c]}
+async function queueLaunch(list){
+  return api('/launcher/queue','POST',{accounts:list,by:me.k,byName:P[me.k]?.displayName||me.k})}
 function renderLaunch(main){
   if(LCH.err){main.append(h('p',{className:'bad',textContent:LCH.err+'. Add the launcher and bot rules in Firebase.'}));return}
-  const st=LCH.status||{},set=LCH.settings||{},accs=LCH.accounts||{},online=!!st.workerAt&&Math.abs(Date.now()-st.workerAt)<60000;
+  const st=LCH.status||{},set=LCH.settings||{},accs=LCH.accounts||{},bots=botMap(set),online=!!st.workerAt&&Math.abs(Date.now()-st.workerAt)<60000;
   const names=Object.values(accs).filter(n=>typeof n==='string').sort((a,b)=>a.localeCompare(b));
-  let bs,bc;
-  if(!set.bot){bs='Pick a bot account';bc='mu'}
-  else if(!BOT.t){bs='No signal yet. Is the scanner running on this account?';bc='bad'}
-  else{[bs,bc]=Date.now()-BOT.t>120000&&BOT.state!=='stopped'?['No signal','bad']:(BST[BOT.state]||[String(BOT.state),'mu']);bs+=` · ${ago(BOT.t)}`}
+  for(const n of[...lSel])if(!names.includes(n))lSel.delete(n);
   const cb=h('input',{type:'checkbox',checked:!!set.auto,onchange:e=>setLaunch({auto:e.target.checked})});
-  const selb=h('select',{onchange:e=>{e.target.blur();setLaunch({bot:e.target.value||null})}},
-    h('option',{value:'',textContent:'Choose the bot account'}),...names.map(n=>h('option',{value:n,textContent:n,selected:n===set.bot})));
+
+  // bot picker (zooms in like the filter menu)
+  const bNames=Object.values(bots);
+  const picker=h('div',{style:'position:relative'},h('button',{textContent:(bNames.length?`Bots: ${bNames.join(', ')}`:'Choose bot accounts')+' ▾',
+    onclick:e=>{e.stopPropagation();bOpen=!bOpen;bAnim=bOpen;render()}}));
+  if(bOpen){
+    const pop=h('div',{className:'pop'+(bAnim?' zin':''),onclick:e=>e.stopPropagation()});bAnim=false;
+    if(!names.length)pop.append(h('div',{className:'mu pad',textContent:'Add accounts first.'}));
+    for(const n of names){const k=n.toLowerCase();
+      pop.append(h('label',{className:'it chk'},h('input',{type:'checkbox',checked:!!bots[k],onchange:e=>{const m={...bots};if(e.target.checked)m[k]=n;else delete m[k];setLaunch({bots:Object.keys(m).length?m:null,bot:null})}}),n))}
+    picker.append(pop)}
+
   const add=h('input',{placeholder:'Account username (as in RAM)',maxLength:20});
   const addFn=()=>{const n=add.value.trim();if(!/^\w{3,20}$/.test(n))return alert('Usernames are 3 to 20 letters, numbers or _');
     api('/launcher/accounts/'+n.toLowerCase(),'PUT',n).then(()=>{accs[n.toLowerCase()]=n;LCH.accounts=accs;render()}).catch(e=>alert(e.message))};
   add.onkeydown=e=>{if(e.key==='Enter')addFn()};
-  const launchBtn=n=>{const b=h('button',{textContent:'🚀 Launch',disabled:!online,title:online?'Launch into place '+(st.placeId||''):'Worker offline'});
-    b.onclick=async()=>{b.disabled=true;
-      try{await api('/launcher/queue','POST',{account:n,by:me.k,byName:P[me.k]?.displayName||me.k});b.textContent='Sent'}catch(e){alert(e.message)}
-      setTimeout(()=>{loadLauncher().then(()=>{if(!busy())render()})},4000)};return b};
+  const send=async(b,list)=>{b.disabled=true;try{await queueLaunch(list);b.textContent='Sent'}catch(e){alert(e.message)}
+    setTimeout(()=>{loadLauncher().then(()=>{if(!busy())render()})},4000)};
+  const launchBtn=n=>{const b=h('button',{textContent:'🚀 Launch',disabled:!online,title:online?'Launch into place '+(st.placeId||''):'Worker offline'});b.onclick=()=>send(b,[n]);return b};
+  const multi=h('button',{textContent:`🚀 Launch selected (${lSel.size})`,disabled:!online||!lSel.size});multi.onclick=()=>send(multi,[...lSel]);
+  const all=h('button',{textContent:lSel.size===names.length&&names.length?'Clear selection':'Select all',onclick:()=>{lSel=lSel.size===names.length?new Set():new Set(names);render()}});
   const lg=Object.entries(LCH.log||{}).sort((a,b)=>a[0]<b[0]?1:-1);
   main.append(
     h('div',{className:'pc pset'},
       h('small',{className:online?'ok':'bad',textContent:online?`Worker online · always joins place ${st.placeId||'?'}`:'Worker offline. Run launcher-worker.py on the PC with Roblox Account Manager.'}),
       h('label',{className:'sw'},cb,h('span',{className:'knob'}),h('b',{textContent:'Auto-Call Bot when down'})),
-      h('small',{className:'mu',textContent:'Relaunches the bot account when its scanner disconnects or stops checking in for 2 minutes.'}),
-      selb,h('small',{className:bc,textContent:bs})),
+      h('small',{className:'mu',textContent:'Relaunches any bot account that disconnects or stops checking in for 2 minutes.'}),
+      picker),
     h('h2',{className:'sec',textContent:'Accounts'}),
     h('div',{className:'addr'},add,h('button',{textContent:'Add',onclick:addFn})),
-    names.length?h('div',{className:'list'},...names.map(n=>h('div',{className:'row acc'+(n===set.bot?' a-ai':'')},
-      h('b',{textContent:n+(n===set.bot?' (bot)':'')}),launchBtn(n),
-      h('button',{textContent:'✕',title:'Remove from this list',onclick:()=>{if(confirm(`Remove ${n} from the list?`))api('/launcher/accounts/'+n.toLowerCase(),'DELETE').then(()=>{delete accs[n.toLowerCase()];render()}).catch(e=>alert(e.message))}}))))
+    names.length?h('div',{className:'addr'},multi,all):'',
+    names.length?h('div',{className:'list'+(lAnim?' zin':'')},...names.map(n=>{const isBot=!!bots[n.toLowerCase()],[bs,bc]=botStatus(n),hasHb=!!BOT[n.toLowerCase()];
+      return h('div',{className:'row acc'+(isBot?' a-ai':'')},
+        h('input',{type:'checkbox',checked:lSel.has(n),onchange:e=>{e.target.checked?lSel.add(n):lSel.delete(n);render()}}),
+        h('div',{className:'rb'},h('b',{textContent:n+(isBot?' (bot)':'')}),...(isBot||hasHb?[h('small',{className:bc,style:'display:block',textContent:bs})]:[])),
+        launchBtn(n),
+        h('button',{textContent:'✕',title:'Remove from this list',onclick:()=>{if(confirm(`Remove ${n} from the list?`))api('/launcher/accounts/'+n.toLowerCase(),'DELETE').then(()=>{delete accs[n.toLowerCase()];render()}).catch(e=>alert(e.message))}}))}))
       :h('p',{className:'mu',textContent:'No accounts yet. Add the usernames from Roblox Account Manager.'}),
     h('h2',{className:'sec',textContent:'Recent launches'}),
     lg.length?h('div',{className:'list'},...lg.map(([k,e])=>h('div',{className:'row a-'+(e.ok?'resolved':'denied')},
@@ -479,6 +500,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['1.7','2026-10-07',['Launcher: pick several accounts and launch them together (one after another)','Auto-Call works for several bot accounts at once','Each account shows its own bot status','Bot picker and account list zoom in like the filter menu']],
   ['1.6.1','2026-10-07',['Click a report image to open it full screen: scroll or pinch to zoom, drag to move, double-click to zoom in']],
   ['1.6','2026-10-07',['Launcher tab: launch Roblox Account Manager accounts into place 12880465992','Auto-Call Bot when down: relaunches the bot when it disconnects or stops checking in','Bot status (online, hopping, disconnected) from the scanner','Typing in a box is no longer wiped by the auto-refresh']],
   ['1.5.2','2026-10-07',['Avatar heads now load through the Roblox thumbnail API']],
@@ -493,7 +515,7 @@ const CHANGES=[
 function renderLog(main){
   main.append(h('div',{className:'list'},...CHANGES.map(([v,d,items])=>h('div',{className:'pc'},
     h('div',{className:'hd'},h('b',{textContent:'v'+v}),h('small',{className:'mu',textContent:d})),
-    h('ul',{className:'cl'},...items.map(t=>h('li',{textContent:t})))))))}
+    h('ul',{className:'cl'},...items.map(t=>h('li',{textContent:t}))),...(/1/.test(v)&&/7/.test(v)?[h('div',{className:'wd',title:'W.D. GASTER WAS HERE',textContent:'W.D. GASTER WAS HERE'})]:[])))))}
 
 function renderAll(main){
   const ps=Object.entries(P);
@@ -591,7 +613,7 @@ async function load(){
 $('#rf').onclick=load;$('#ex').onclick=exportValid;$('#q').oninput=render;
 $('#back').onclick=()=>{user=null;render()};
 addEventListener('keydown',e=>{if(e.key==='Escape'&&sel)closeSide()});
-addEventListener('click',()=>{if(fOpen){fOpen=false;paintFlt()}});
+addEventListener('click',()=>{if(fOpen){fOpen=false;paintFlt()}if(bOpen){bOpen=false;render()}});
 setInterval(()=>{if(!document.hidden)load()},20000);
 setInterval(()=>{if(!document.hidden&&me&&view==='launch')loadLauncher().then(()=>{if(view==='launch'&&!busy())render()})},5000);
 setInterval(()=>{const n=$('#dl');if(n&&pend[sel])n.textContent=dlText(sel)},1000);
