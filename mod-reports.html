@@ -348,18 +348,19 @@ function av(p,sz=40){
 async function loadStats(){lastStats=Date.now();try{HA=await api('/history')||{}}catch{}}
 function statsFor(k){
   // Each report counts once, for whoever handled it last. Reopening a report removes it from the stats.
-  const s={resolved:0,denied:0,valid:0,today:0,month:0,year:0,life:0},n=new Date(),cur={};
+  const s={resolved:0,denied:0,valid:0,today:0,month:0,year:0,life:0},n=new Date(),cur={},U={resolved:new Set(),denied:new Set(),valid:new Set()};
   for(const id of Object.keys(HA).sort()){
     const e=HA[id],rid=e.reportId||id;
     if(e.action==='cleared')delete cur[rid];
     else if(['resolved','denied','valid'].includes(e.action))cur[rid]=e}
   for(const rid in cur){
     const e=cur[rid];if(e.by!==k)continue;
-    s[e.action]++;s.life++;const d=new Date(e.t);
+    s[e.action]++;s.life++;U[e.action].add(String(e.userId??e.username));const d=new Date(e.t);
     if(d.getFullYear()===n.getFullYear()){s.year++;if(d.getMonth()===n.getMonth()){s.month++;if(d.getDate()===n.getDate())s.today++}}}
+  s.uResolved=U.resolved.size;s.uDenied=U.denied.size;s.uValid=U.valid.size;
   return s}
 function tiles(s,hide,cls){
-  return h('div',{className:'grid stats '+(cls||'')},...[['Resolved',s.resolved,'g'],['Denied',s.denied,'r'],['Valid',s.valid,'v'],['Today',s.today,'o'],['This month',s.month,'o'],['This year',s.year,'o'],['Lifetime',s.life,'']]
+  return h('div',{className:'grid stats '+(cls||'')},...[['Resolved',s.resolved,'g'],['Denied',s.denied,'r'],['Valid',s.valid,'v'],['Today',s.today,'o'],['This month',s.month,'o'],['This year',s.year,'o'],['Lifetime',s.life,''],['Users resolved',s.uResolved,'g'],['Users denied',s.uDenied,'r'],['Users valid',s.uValid,'v']]
     .map(([l,v,c])=>h('div',{className:'stat '+c},h('div',{className:'n',textContent:hide?'nil':v}),h('small',{textContent:l}))))}
 
 const HEAD={};let headFail=0,headBusy=false;
@@ -470,8 +471,12 @@ function renderLaunch(main){
   const addFn=()=>{const n=add.value.trim();if(!/^\w{3,20}$/.test(n))return alert('Usernames are 3 to 20 letters, numbers or _');
     api('/launcher/accounts/'+n.toLowerCase(),'PUT',n).then(()=>{accs[n.toLowerCase()]=n;LCH.accounts=accs;render()}).catch(e=>alert(e.message))};
   add.onkeydown=e=>{if(e.key==='Enter')addFn()};
-  const send=async(b,list)=>{b.disabled=true;try{await queueLaunch(list);b.textContent='Sent'}catch(e){alert(e.message)}
-    setTimeout(()=>{loadLauncher().then(()=>{if(!busy())render()})},4000)};
+  const send=async(b,list)=>{b.disabled=true;let key;
+    try{key=(await queueLaunch(list))?.name;b.textContent='Sent'}catch(e){alert('Couldn\u2019t send: '+e.message);b.disabled=false;return}
+    // If the request is still waiting after 12s, the worker never picked it up
+    setTimeout(async()=>{let left=null;try{left=key&&await api('/launcher/queue/'+key)}catch{}
+      if(left){api('/launcher/queue/'+key,'DELETE').catch(()=>{});alert('The launcher worker didn\u2019t pick up the request, so it was cancelled. Check that launcher-worker.py is running (the newest version) and look at its window for errors.')}
+      loadLauncher().then(()=>{if(!busy())render()})},12000)};
   const launchBtn=n=>{const b=h('button',{textContent:'🚀 Launch',disabled:!online,title:online?'Launch into place '+(st.placeId||''):'Worker offline'});b.onclick=()=>send(b,[n]);return b};
   const multi=h('button',{textContent:`🚀 Launch selected (${lSel.size})`,disabled:!online||!lSel.size});multi.onclick=()=>send(multi,[...lSel]);
   const all=h('button',{textContent:lSel.size===names.length&&names.length?'Clear selection':'Select all',onclick:()=>{lSel=lSel.size===names.length?new Set():new Set(names);render()}});
@@ -500,6 +505,8 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['1.7.2','2026-10-08',['New stats: Users resolved, Users denied and Users valid (how many different players, not reports)']],
+  ['1.7.1','2026-10-07',['Launcher warns you when the worker doesn\u2019t pick up a launch request']],
   ['1.7','2026-10-07',['Launcher: pick several accounts and launch them together (one after another)','Auto-Call works for several bot accounts at once','Each account shows its own bot status','Bot picker and account list zoom in like the filter menu']],
   ['1.6.1','2026-10-07',['Click a report image to open it full screen: scroll or pinch to zoom, drag to move, double-click to zoom in']],
   ['1.6','2026-10-07',['Launcher tab: launch Roblox Account Manager accounts into place 12880465992','Auto-Call Bot when down: relaunches the bot when it disconnects or stops checking in','Bot status (online, hopping, disconnected) from the scanner','Typing in a box is no longer wiped by the auto-refresh']],
