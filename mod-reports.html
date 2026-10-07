@@ -446,7 +446,7 @@ function renderLaunch(main){
   let bs,bc;
   if(!set.bot){bs='Pick a bot account';bc='mu'}
   else if(!BOT.t){bs='No signal yet. Is the scanner running on this account?';bc='bad'}
-  else{[bs,bc]=Date.now()-BOT.t>120000&&BOT.state!=='stopped'?['No signal','bad']:(BST[BOT.state]||[String(BOT.state),'mu']);bs+=` · ${BOT.players??'?'} players · ${ago(BOT.t)}`}
+  else{[bs,bc]=Date.now()-BOT.t>120000&&BOT.state!=='stopped'?['No signal','bad']:(BST[BOT.state]||[String(BOT.state),'mu']);bs+=` · ${ago(BOT.t)}`}
   const cb=h('input',{type:'checkbox',checked:!!set.auto,onchange:e=>setLaunch({auto:e.target.checked})});
   const selb=h('select',{onchange:e=>{e.target.blur();setLaunch({bot:e.target.value||null})}},
     h('option',{value:'',textContent:'Choose the bot account'}),...names.map(n=>h('option',{value:n,textContent:n,selected:n===set.bot})));
