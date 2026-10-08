@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mod Reports</title>
+<style>
+:root{--bg:#090c13;--card:#121826;--line:#212a3b;--tx:#e6eaf4;--mu:#8793ab;--ac:#6f8cff;--gr:#1f9d55;--rd:#c23b3b;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  background:radial-gradient(900px 500px at 85% -10%,#1a2146 0%,transparent 60%),linear-gradient(160deg,#080b11,#0c111b 60%,#090c13);background-attachment:fixed}
+input,button{font:inherit;color:inherit}
+input{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding:9px 11px;min-width:0}
+button{background:linear-gradient(180deg,#182036,#111826);border:1px solid var(--line);border-radius:6px;padding:8px 12px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--ac)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+button:disabled{opacity:.55;cursor:default}
+[hidden]{display:none!important}
+.mu{color:var(--mu)}
+
+#nav{position:fixed;left:0;top:0;bottom:0;width:208px;padding:16px 12px;display:flex;flex-direction:column;gap:6px;z-index:6;
+  background:linear-gradient(180deg,#10163a,#0a0e18 70%);border-right:1px solid var(--line)}
+.brand{font-weight:700;font-size:17px;padding:4px 10px 14px}
+.nv{position:relative;text-align:left;background:none;border:1px solid transparent;padding:10px 12px;border-radius:8px}
+.nv small{display:block;color:var(--mu);font-size:12px}
+.nv.on{background:linear-gradient(135deg,#3b55c9,#6b44c8);border-color:#7a8cff55}
+.nv.on small{color:#ffffffb8}
+.bd{position:absolute;right:10px;top:12px;background:#ffffff22;border-radius:10px;padding:0 7px;font-size:12px}
+#content{margin-left:208px}
+body.open #content{margin-right:380px}
+
+header{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;padding:12px 16px;
+  background:linear-gradient(90deg,#0b1020d9,#090c13d9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header h1{font-size:17px;margin:0;flex:1;white-space:nowrap}
+#q{width:200px}
+#st{font-size:12px;white-space:nowrap}
+main{padding:16px}
+h2{margin:0 0 14px;font-size:18px}
+h2.sec{margin-top:28px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.tile{display:block;width:100%;min-height:92px;text-align:left;padding:13px;border-radius:6px;background:linear-gradient(145deg,#171f33,#0f1522)}
+.tile b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile small{display:block;color:var(--mu)}
+.tile.s-resolved{background:linear-gradient(135deg,#23a85e,#146b3b);border-color:#37c978}
+.tile.s-denied{background:linear-gradient(135deg,#d24848,#8f2626);border-color:#e25b5b}
+.tile.s-valid{background:linear-gradient(90deg,#1f9d55 12%,#101725 88%);border-color:#37c978}
+.tile.s-resolved small,.tile.s-denied small,.tile.s-valid small{color:#ffffffc4}
+.tile.sel{outline:2px solid var(--ac)}
+.msg{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-top:6px;word-break:break-word}
+
+.stats{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.stat{padding:16px;border-radius:8px;border:1px solid var(--line);background:linear-gradient(145deg,#171f33,#0f1522)}
+.stat .n{font-size:32px;font-weight:700;line-height:1.1}
+.stat small{color:var(--mu)}
+.stat.o{background:linear-gradient(145deg,#2a3270,#0f1522)}
+.stat.g{background:linear-gradient(145deg,#14502f,#0f1522)}
+.stat.r{background:linear-gradient(145deg,#5a1f24,#0f1522)}
+.stat.v{background:linear-gradient(90deg,#14502f,#0f1522)}
+
+.list{display:grid;gap:8px}
+.row{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-left:3px solid #4a5670;border-radius:8px;background:linear-gradient(145deg,#151c2d,#0e1420)}
+.row.a-resolved{border-left-color:#2fbf70}
+.row.a-denied{border-left-color:#e25b5b}
+.row.a-valid{border-left-color:#8bd3a8}
+.row.a-cleared{border-left-color:var(--ac)}
+.ic{font-size:20px}
+.rb{flex:1;min-width:0}
+.rb .msg{-webkit-line-clamp:2;margin-top:2px;color:var(--mu)}
+.tm{color:var(--mu);white-space:nowrap}
+
+aside{position:fixed;top:0;right:0;bottom:0;width:380px;max-width:100%;padding:16px;overflow:auto;transform:translateX(100%);transition:transform .2s;z-index:10;
+  background:linear-gradient(180deg,#151c2e,#0d121d);border-left:1px solid var(--line)}
+body.open aside{transform:none}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.shot,.noimg{display:block;width:100%;border-radius:4px;border:1px solid var(--line);background:#080b11}
+.noimg{display:grid;place-items:center;height:150px;color:var(--mu)}
+.f{margin-top:12px}
+.f small{display:block;color:var(--mu);font-size:12px}
+.v{user-select:all;word-break:break-all}
+.m{user-select:text;white-space:pre-wrap;word-break:break-word;background:#080b11;border:1px solid var(--line);border-radius:4px;padding:10px;margin-top:4px}
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.acts button{flex:1 1 30%}
+.sb.on.ok{background:linear-gradient(135deg,#23a85e,#146b3b);border-color:#37c978}
+.sb.on.no{background:linear-gradient(135deg,#d24848,#8f2626);border-color:#e25b5b}
+.sb.on.va{background:linear-gradient(90deg,#1f9d55 15%,#111826 85%);border-color:#37c978}
+.del{border-color:#7a3434}
+
+#login{max-width:340px;margin:12vh auto;padding:0 16px;display:grid;gap:10px}
+#login h1{font-size:34px;margin:0}
+#login small{margin:-6px 0 8px}
+#err{color:#ff9a9a;min-height:1.4em;font-size:13px}
+#go{background:linear-gradient(135deg,#3b55c9,#6b44c8);border-color:#7a8cff55}
+.me{margin-top:auto;display:flex;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--line);flex-wrap:wrap}
+.me b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me button{width:100%}
+.av{border-radius:50%;object-fit:cover;display:grid;place-items:center;background:linear-gradient(135deg,#3b55c9,#6b44c8);font-weight:700;flex:none}
+.pc{padding:14px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(145deg,#151c2d,#0e1420)}
+.pc .hd{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.pc small{display:block}
+.mini{grid-template-columns:repeat(auto-fill,minmax(88px,1fr))}
+.mini .stat{padding:10px}
+.mini .n{font-size:22px}
+.pset{display:grid;gap:10px;justify-items:start;max-width:360px}
+.chk{display:flex;gap:8px;align-items:center}
+#dl{display:block;margin-top:10px}
+.tl{display:flex;gap:10px;align-items:center}
+.tb{min-width:0;flex:1}
+.tile.s-ai{background:linear-gradient(135deg,#c99a14,#7a5a0c);border-color:#f0c040}
+.tile.s-ai small{color:#ffffffc4}
+.sb.on.ai{background:linear-gradient(135deg,#c99a14,#7a5a0c);border-color:#f0c040}
+.stat.y{background:linear-gradient(145deg,#5a4510,#0f1522)}
+.row.a-ai{border-left-color:#e0b020}
+.wd{margin-top:10px;font-family:Wingdings,'Wingdings 2','Wingdings 3',sans-serif;font-size:18px;letter-spacing:2px;color:var(--mu)}
+.cl{margin:0;padding-left:18px;display:grid;gap:4px}
+.ok{color:#4bd18b}
+.bad{color:#ff9a9a}
+.sw{display:flex;align-items:center;gap:10px;cursor:pointer}
+.sw input{position:absolute;opacity:0;pointer-events:none}
+.knob{width:42px;height:24px;border-radius:12px;background:#2a3246;position:relative;transition:background .2s;flex:none}
+.knob::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s}
+.sw input:checked+.knob{background:linear-gradient(135deg,#3b55c9,#6b44c8)}
+.sw input:checked+.knob::after{transform:translateX(18px)}
+.sw input:focus-visible+.knob{outline:2px solid var(--ac);outline-offset:2px}
+select{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding:9px 11px;color:inherit;font:inherit;max-width:100%}
+.addr{display:flex;gap:8px;max-width:420px;margin-bottom:10px}
+.addr input{flex:1}
+.row.acc{align-items:center}
+.row.acc b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#fw{position:relative}
+.shot{cursor:zoom-in}
+#zm{position:fixed;inset:0;z-index:50;background:#000d;overflow:hidden;cursor:grab;touch-action:none;animation:zin .18s ease-out}
+#zm img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;user-select:none;-webkit-user-drag:none}
+#zm .zb{position:fixed;top:12px;right:12px;display:flex;gap:6px;z-index:51}
+#zm small{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);color:#ffffffaa}
+.pop{position:absolute;top:calc(100% + 6px);left:0;min-width:210px;max-height:300px;overflow:auto;z-index:20;padding:6px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,#151c2e,#0d121d);box-shadow:0 12px 30px #000a}
+.pop .it{display:block;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:8px 10px}
+.pop .it:hover{background:#ffffff12}
+.pad{padding:8px 10px}
+.zin{animation:zin .22s ease-out}
+.zout{animation:zout .17s ease-in forwards}
+@keyframes zin{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:none}}
+@keyframes zout{to{opacity:0;transform:scale(1.35)}}
+@media(prefers-reduced-motion:reduce){.zin,.zout{animation:none}}
+.pset input:not([type=checkbox]){width:100%}
+@media(max-width:760px){.me{display:none}}
+@media(max-width:760px){
+  #nav{position:static;width:auto;flex-direction:row;overflow-x:auto;padding:8px}
+  .brand,.nv small{display:none}
+  .nv{white-space:nowrap;padding-right:34px}
+  #content{margin-left:0}
+  body.open #content{margin-right:0}
+  aside{width:100%}
+  #q{width:120px}
+}
+@media(prefers-reduced-motion:reduce){aside{transition:none}}
+</style>
+</head>
+<body>
+<form id="login" hidden>
+  <h1>Who might you be?</h1>
+  <small class="mu">A reference to &ldquo;Who might you be?&rdquo; from Deltarune Chapter 5</small>
+  <input id="dn" placeholder="Display name" autocomplete="off" hidden>
+  <input id="un" placeholder="Username" autocomplete="username">
+  <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="go">Sign in</button>
+  <button id="mk" type="button">Create profile</button>
+  <div id="err"></div>
+</form>
+<div id="app" hidden>
+<nav id="nav"></nav>
+<div id="content">
+  <header>
+    <button id="back" hidden>Back</button>
+    <h1 id="title"></h1>
+    <input id="q" placeholder="Find a user">
+    <div id="fw" hidden></div>
+    <button id="ex" hidden>Export valid</button>
+    <button id="rv" hidden>Resolve all valid</button>
+    <span id="cd" hidden></span>
+    <span id="st"></span>
+    <button id="rf" title="Refresh">Refresh</button>
+  </header>
+  <main id="main"></main>
+</div>
+<aside id="side"></aside>
+</div>
+<script>
+const DB=window.__CFG?.db;
+if(!DB){document.body.textContent='Open the dashboard through mod-reports-loader.html.';throw new Error('no config')}
+const $=s=>document.querySelector(s);
+const h=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);e.append(...k);return e};
+let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={};
+
+const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',all:'All profiles',prof:'Profile settings',log:'Changelogs'};
+const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['log','Changelogs','What changed']];
+const ACT={resolved:['✅','Resolved'],denied:['❌','Denied'],valid:['👍','Marked valid'],cleared:['↩️','Reopened'],deleted:['🗑','Deleted']};
+
+async function api(path,method='GET',body,qs){
+  const r=await fetch(`${DB}${path}.json${qs?'?'+qs:''}`,{method,body:body===undefined?undefined:JSON.stringify(body)});
+  if(!r.ok)throw new Error(r.status==401?'Permission denied, check the database rules':'HTTP '+r.status);
+  return r.json()}
+const stat=(t,bad)=>{const e=$('#st');e.textContent=t;e.style.color=bad?'#ff9a9a':'#4bd18b'};
+
+async function loadHist(){
+  try{H=await api('/history','GET',undefined,'orderBy=%22%24key%22&limitToLast=200')||{};hErr=false}catch{hErr=true}}
+async function log(action,r,k){
+  try{
+    await api('/history','POST',{action,reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,by:me.k,byName:P[me.k]?.displayName??me.k,t:{'.sv':'timestamp'}});
+    await loadHist();render()
+  }catch{}}
+
+function groups(ff){
+  const m={};
+  for(const k in D){const r=D[k];if(ff&&!matches(r))continue;const id=String(r.userId??r.username);(m[id]??=[]).push({...r,k})}
+  return Object.entries(m).map(([id,list])=>{list.sort((a,b)=>a.k<b.k?1:-1);return{id,list,name:list[0].displayName,user:list[0].username}})
+    .sort((a,b)=>a.list[0].k<b.list[0].k?1:-1)}
+
+function go(v){view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(st)loadStats().then(render);if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
+function paintNav(){
+  const open=Object.values(D).filter(r=>!r.status).length;
+  $('#nav').replaceChildren(h('div',{className:'brand',textContent:'Mod Reports'}),
+    ...NAV.map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':''),onclick:()=>go(id)},
+      h('b',{textContent:t}),h('small',{textContent:s}),
+      ...(id==='afr'&&open?[h('span',{className:'bd',textContent:open})]:[]))),
+    h('div',{className:'me'},av(P[me.k],34),h('b',{textContent:P[me.k]?.displayName||me.k}),h('button',{textContent:'Sign out',onclick:signout})))}
+
+function render(){
+  paintNav();
+  const main=$('#main');main.replaceChildren();
+  $('#title').textContent=TITLE[view];
+  $('#back').hidden=!(view==='afr'&&user);
+  $('#q').hidden=!(view==='afr'&&!user);
+  $('#ex').hidden=view!=='afr';{const n=Object.values(D).filter(r=>r.status==='valid').length;$('#rv').hidden=view!=='afr';$('#rv').disabled=!n;$('#rv').textContent=`✅ Resolve all valid (${n})`}$('#fw').hidden=view!=='afr';$('#ex').textContent=`Export valid (${Object.values(D).filter(r=>r.status==='valid').length})`;
+  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog}[view])(main)}
+
+function renderHome(main){
+  const rs=Object.values(D),n=s=>rs.filter(r=>r.status===s&&!r.aiv).length;
+  const S=[['Open',rs.filter(r=>!r.status).length,'o'],['Resolved',n('resolved'),'g'],['Denied',n('denied'),'r'],['Valid, can\u2019t act yet',n('valid'),'v'],['AI valid',rs.filter(r=>r.aiv).length,'y'],['Total reports',rs.length,''],['Users flagged',groups().length,'']];
+  main.append(
+    h('h2',{textContent:'Your stats'}),tiles(statsFor(me.k)),h('h2',{className:'sec',textContent:'Reports overview'}),h('div',{className:'grid stats'},...S.map(([l,v,c])=>h('div',{className:'stat '+c},h('div',{className:'n',textContent:v}),h('small',{textContent:l})))),
+    h('h2',{className:'sec',textContent:'Recent activity'}),histList(6))}
+
+function renderHist(main){main.append(histList(200))}
+
+function histList(n){
+  if(hErr)return h('p',{className:'mu',textContent:'Can\u2019t read history. Add the /history rules in Firebase.'});
+  const es=Object.entries(H).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,n);
+  if(!es.length)return h('p',{className:'mu',textContent:'No actions yet.'});
+  return h('div',{className:'list'},...es.map(([k,e])=>{
+    const[ic,l]=ACT[e.action]||['•',String(e.action)];
+    return h('div',{className:'row a-'+e.action},
+      h('span',{className:'ic',textContent:ic}),
+      h('div',{className:'rb'},h('b',{textContent:`${l}: ${e.displayName||e.username||'unknown'} (@${e.username||'?'})${e.byName?' by '+e.byName:''}`}),h('div',{className:'msg',textContent:e.text??''})),
+      h('small',{className:'tm',textContent:e.t?new Date(e.t).toLocaleString():''}))}))}
+
+function renderAfr(main){
+  const gs=groups(true),q=$('#q').value.trim().toLowerCase();
+  loadHeads(gs.map(g=>g.id));
+  if(!user){
+    const f=gs.filter(g=>[g.name,g.user,g.id].join(' ').toLowerCase().includes(q));
+    main.append(f.length?h('div',{className:'grid'},...f.map(g=>h('button',{className:'tile',onclick:()=>{user=g.id;render()}},
+      h('div',{className:'tl'},head(g.id,44,g.name||g.user),h('div',{className:'tb'},h('b',{textContent:g.name||g.user}),h('small',{textContent:'@'+g.user}),
+      h('small',{textContent:`${g.list.length} report${g.list.length>1?'s':''}, ${g.list.filter(r=>!r.status).length} open`}))))))
+      :h('p',{className:'mu',textContent:Object.keys(D).length?'No user matches that search.':'No reports yet. New ones show up here after the scanner uploads them.'}));
+  }else{
+    const g=gs.find(x=>x.id===user);if(!g){user=null;return render()}
+    main.append(h('div',{className:'tl',style:'margin-bottom:14px'},head(g.id,48,g.name||g.user),h('h2',{style:'margin:0',textContent:`${g.name||g.user} (@${g.user})`})),h('div',{className:'grid'},...g.list.map(r=>
+      h('button',{className:`tile s-${r.aiv?'ai':(r.status||'none')}${r.k===sel?' sel':''}`,onclick:()=>openSide(r.k)},
+        h('small',{textContent:(r.word?`Flagged: ${r.word}`:'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),h('div',{className:'msg',textContent:r.text})))));
+  }}
+
+function openZoom(src){
+  const img=h('img',{src,draggable:false}),box=h('div',{id:'zm'});
+  let sc=1,x=0,y=0,fit=1,drag=null;
+  const ap=()=>{img.style.transform=`translate(${x}px,${y}px) scale(${sc})`};
+  const reset=()=>{fit=Math.min(innerWidth*.92/img.naturalWidth,innerHeight*.92/img.naturalHeight);sc=fit;x=(innerWidth-img.naturalWidth*sc)/2;y=(innerHeight-img.naturalHeight*sc)/2;ap()};
+  const zoomAt=(f,cx,cy)=>{const n=Math.min(Math.max(sc*f,fit*.5),fit*20);x=cx-(cx-x)*n/sc;y=cy-(cy-y)*n/sc;sc=n;ap()};
+  const close=()=>{box.remove();removeEventListener('keydown',key,true)};
+  const key=e=>{if(e.key==='Escape'){e.stopImmediatePropagation();close()}else if(e.key==='+'||e.key==='=')zoomAt(1.25,innerWidth/2,innerHeight/2);else if(e.key==='-')zoomAt(.8,innerWidth/2,innerHeight/2);else if(e.key==='0')reset()};
+  img.onload=reset;
+  box.onwheel=e=>{e.preventDefault();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX,e.clientY)};
+  const pts=new Map();let pinch=null;
+  box.onpointerdown=e=>{if(e.target.closest('.zb'))return;box.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});drag={x:e.clientX,y:e.clientY,moved:false};box.style.cursor='grabbing'};
+  box.onpointermove=e=>{if(!pts.has(e.pointerId))return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){const[a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y),cx=(a.x+b.x)/2,cy=(a.y+b.y)/2;if(pinch)zoomAt(d/pinch,cx,cy);pinch=d;drag.moved=true;return}
+    if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;x+=dx;y+=dy;drag.x=e.clientX;drag.y=e.clientY;ap()}};
+  box.onpointerup=box.onpointercancel=e=>{pts.delete(e.pointerId);if(pts.size<2)pinch=null;box.style.cursor='grab';
+    if(drag&&!drag.moved&&e.target===box&&!pts.size)close();if(!pts.size)drag=null};
+  box.ondblclick=e=>{if(e.target===img)sc>fit*1.5?reset():zoomAt(2.5,e.clientX,e.clientY)};
+  box.append(img,h('div',{className:'zb'},
+    h('button',{textContent:'+',title:'Zoom in',onclick:()=>zoomAt(1.25,innerWidth/2,innerHeight/2)}),
+    h('button',{textContent:'−',title:'Zoom out',onclick:()=>zoomAt(.8,innerWidth/2,innerHeight/2)}),
+    h('button',{textContent:'Fit',onclick:reset}),
+    h('button',{textContent:'✕',title:'Close',onclick:close})),
+    h('small',{textContent:'Scroll or pinch to zoom · drag to move · double-click to zoom · Esc to close'}));
+  document.body.append(box);addEventListener('keydown',key,true);if(img.complete&&img.naturalWidth)reset()}
+function openSide(k){sel=k;document.body.classList.add('open');render();paintSide()}
+function closeSide(){clearInterval(T);sel=null;document.body.classList.remove('open');$('#side').replaceChildren();render()}
+
+function paintSide(){
+  clearInterval(T);
+  const r=D[sel];if(!r)return;
+  const src=r.image||r.imageUrl||'';
+  const img=/^(data:image\/|https:\/\/)/.test(src)
+    ?h('img',{className:'shot',src,referrerPolicy:'no-referrer',title:'Click to zoom',onclick:()=>openZoom(src),onerror(){this.replaceWith(h('div',{className:'noimg',textContent:'Image failed to load'}))}})
+    :h('div',{className:'noimg',textContent:'Loading image...'});
+  const f=(l,v)=>h('div',{className:'f'},h('small',{textContent:l}),h('span',{className:'v',textContent:v??'-'}));
+  const sb=(st,cls,txt,tip)=>h('button',{className:`sb ${cls}${r.status===st?' on':''}`,textContent:txt,title:tip,onclick:()=>setStatus(st)});
+  const del=h('button',{className:'del',textContent:'🗑 Delete'}),can=h('button',{textContent:'Cancel',hidden:true});
+  const reset=()=>{clearInterval(T);del.disabled=false;del.textContent='🗑 Delete';delete del.dataset.a;can.hidden=true};
+  del.onclick=()=>{
+    if(del.dataset.a)return doDelete();
+    del.dataset.a=1;can.hidden=false;del.disabled=true;let n=2;del.textContent=`Wait ${n}...`;
+    T=setInterval(()=>{if(--n>0){del.textContent=`Wait ${n}...`;return}clearInterval(T);del.disabled=false;del.textContent='⚠ Confirm delete'},1000)};
+  can.onclick=reset;
+  $('#side').replaceChildren(
+    h('div',{className:'top'},h('div',{className:'tl'},head(r.userId,36,r.displayName),h('b',{textContent:'Report'})),h('button',{textContent:'✕',title:'Close',onclick:closeSide})),
+    img,f('Display name',r.displayName),f('Username',r.username),f('User ID',r.userId),
+    h('div',{className:'f'},h('small',{textContent:'Message'}),h('div',{className:'m',textContent:r.text})),
+    ...(r.ai?[h('div',{className:'f'},h('small',{textContent:'AI check'}),h('div',{className:'m',textContent:`${String(r.ai.verdict).toUpperCase()}: ${r.ai.reason||''}`}))]:[]),
+    h('div',{className:'acts'},sb('resolved','ok','✅ Resolved','Resolved'),sb('denied','no','❌ Denied','Denied'),sb('valid',r.aiv?'va ai':'va','👍 Valid','Valid, can\u2019t act on it now')),
+    h('small',{id:'dl',className:'mu',textContent:pend[sel]?dlText(sel):''}),
+    h('div',{className:'acts'},del,can));
+  if(!src){const id=sel;
+    api('/images/'+id).then(d=>{
+      const b=$('#side .noimg');if(sel!==id||!b)return;
+      if(typeof d==='string'&&d.startsWith('data:image/'))b.replaceWith(h('img',{className:'shot',src:d,title:'Click to zoom',onclick:()=>openZoom(d)}));
+      else b.textContent='No image'
+    }).catch(()=>{const b=$('#side .noimg');if(sel===id&&b)b.textContent='No image'})}}
+
+async function setStatus(st){
+  const r=D[sel],k=sel,old=r.status,ai=r.aiv,v=old===st&&!ai?null:st;
+  r.status=v;r.aiv=null;render();paintSide();
+  try{await api('/reports/'+k,'PATCH',{status:v,aiv:null});log(v||'cleared',r,k);if(v==='resolved'||v==='denied')schedDel(k);else cancelDel(k);render();if(sel===k)paintSide()}
+  catch(e){r.status=old;r.aiv=ai;render();paintSide();alert(e.message)}}
+async function doDelete(){
+  const k=sel,r=D[k];cancelDel(k);
+  try{await api('/reports/'+k,'DELETE');delete D[k];api('/images/'+k,'DELETE').catch(()=>{});closeSide();log('deleted',r,k)}catch(e){alert(e.message)}}
+
+const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch{}};
+async function sha(s){
+  try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+  catch{let a=5381,b=52711;for(const c of s){a=Math.imul(a^c.charCodeAt(0),2654435761);b=Math.imul(b^c.charCodeAt(0),1597334677)}return(a>>>0).toString(16)+(b>>>0).toString(16)}}
+
+function av(p,sz=40){
+  const st=`width:${sz}px;height:${sz}px;font-size:${sz/2}px`;
+  return p&&/^data:image\//.test(p.pfp||'')?h('img',{className:'av',style:st,src:p.pfp}):h('div',{className:'av',style:st,textContent:(p?.displayName||'?')[0].toUpperCase()})}
+
+async function loadStats(){lastStats=Date.now();try{HA=await api('/history')||{}}catch{}}
+function statsFor(k){
+  // Each report counts once, for whoever handled it last. Reopening a report removes it from the stats.
+  const s={resolved:0,denied:0,valid:0,today:0,month:0,year:0,life:0},n=new Date(),cur={},U={resolved:new Set(),denied:new Set(),valid:new Set()};
+  for(const id of Object.keys(HA).sort()){
+    const e=HA[id],rid=e.reportId||id;
+    if(e.action==='cleared')delete cur[rid];
+    else if(['resolved','denied','valid'].includes(e.action))cur[rid]=e}
+  for(const rid in cur){
+    const e=cur[rid];if(e.by!==k)continue;
+    s[e.action]++;s.life++;U[e.action].add(String(e.userId??e.username));const d=new Date(e.t);
+    if(d.getFullYear()===n.getFullYear()){s.year++;if(d.getMonth()===n.getMonth()){s.month++;if(d.getDate()===n.getDate())s.today++}}}
+  s.uResolved=U.resolved.size;s.uDenied=U.denied.size;s.uValid=U.valid.size;
+  return s}
+function tiles(s,hide,cls){
+  return h('div',{className:'grid stats '+(cls||'')},...[['Resolved',s.resolved,'g'],['Denied',s.denied,'r'],['Valid',s.valid,'v'],['Today',s.today,'o'],['This month',s.month,'o'],['This year',s.year,'o'],['Lifetime',s.life,''],['Users resolved',s.uResolved,'g'],['Users denied',s.uDenied,'r'],['Users valid',s.uValid,'v']]
+    .map(([l,v,c])=>h('div',{className:'stat '+c},h('div',{className:'n',textContent:hide?'nil':v}),h('small',{textContent:l}))))}
+
+const HEAD={};let headFail=0,headBusy=false;
+try{Object.assign(HEAD,JSON.parse(ls('heads')||'{}'))}catch{}
+function head(id,sz,nm){
+  const st=`width:${sz}px;height:${sz}px;font-size:${sz/2}px`,fb=()=>h('div',{className:'av',style:st,textContent:(nm||'?')[0].toUpperCase()}),u=HEAD[String(id)]?.u;
+  return u?h('img',{className:'av',style:st,src:u,loading:'lazy',referrerPolicy:'no-referrer',onerror(){this.replaceWith(fb())}}):fb()}
+async function loadHeads(ids){
+  if(headBusy||Date.now()-headFail<60000)return;
+  const need=[...new Set(ids.map(String))].filter(id=>/^\d+$/.test(id)&&!(HEAD[id]&&Date.now()-HEAD[id].t<216e5));
+  if(!need.length)return;
+  headBusy=true;
+  try{
+    for(let i=0;i<need.length;i+=50){
+      const chunk=need.slice(i,i+50),q=`/v1/users/avatar-headshot?userIds=${chunk.join(',')}&size=150x150&format=Png&isCircular=true`;
+      let j=null;
+      // Roblox may block direct browser requests (CORS), so fall back to a public proxy of the same API
+      for(const host of ['https://thumbnails.roblox.com','https://thumbnails.roproxy.com']){
+        try{const r=await fetch(host+q);if(r.ok){j=await r.json();break}}catch{}
+      }
+      if(!j){headFail=Date.now();return}
+      for(const id of chunk)HEAD[id]={u:'',t:Date.now()};
+      for(const d of j.data||[])HEAD[d.targetId]={u:d.state==='Completed'&&/^https:\/\/[\w-]+\.rbxcdn\.com\//.test(d.imageUrl||'')?d.imageUrl:'',t:Date.now()}
+    }
+    ls('heads',JSON.stringify(HEAD));render()
+  }finally{headBusy=false}}
+
+const MARKS=[['open','Open (unmarked)'],['resolved','Resolved'],['denied','Denied'],['valid','Valid'],['ai','AI valid']];
+const markOf=r=>r.aiv?'ai':(r.status||'open');
+const fltLabel=()=>!flt.type?'Filter':flt.type==='word'?`Word: ${flt.val}`:`Marked: ${MARKS.find(m=>m[0]===flt.val)[1]}`;
+function matches(r){return!flt.type||(flt.type==='word'?r.word===flt.val:markOf(r)===flt.val)}
+function paintFlt(anim){
+  const box=$('#fw');
+  box.replaceChildren(h('button',{textContent:fltLabel()+' \u25BE',onclick:e=>{e.stopPropagation();fOpen=!fOpen;fLvl='root';paintFlt()}}));
+  if(!fOpen)return;
+  const it=(t,fn)=>h('button',{className:'it',textContent:t,onclick:e=>{e.stopPropagation();fn()}}),items=[];
+  if(fLvl==='root')items.push(it('Show all',()=>pick(null,null)),it('Is by word',()=>zoom('word')),it('Is marked',()=>zoom('mark')));
+  else{
+    items.push(it('Back',()=>zoom('root')));
+    if(fLvl==='word'){
+      const c={};for(const r of Object.values(D))if(r.word)c[r.word]=(c[r.word]||0)+1;
+      Object.entries(c).sort((a,b)=>b[1]-a[1]).forEach(([w,n])=>items.push(it(`${w} (${n})`,()=>pick('word',w))));
+      if(items.length===1)items.push(h('div',{className:'mu pad',textContent:'No flagged words yet.'}))
+    }else MARKS.forEach(([v,l])=>items.push(it(l,()=>pick('mark',v))))}
+  box.append(h('div',{className:'pop'+(anim?' zin':'')},...items))}
+function zoom(l){const p=$('#fw .pop');if(p)p.classList.add('zout');setTimeout(()=>{fLvl=l;paintFlt(true)},170)}
+function pick(t,v){flt={type:t,val:v};fOpen=false;render();paintFlt()}
+
+async function setAcs(v){try{await api('/settings','PATCH',{acs:v,acsAt:{'.sv':'timestamp'}});SET.acs=v;render()}catch(e){alert(e.message)}}
+function renderAi(main){
+  const on=!!SET.acs,online=SET.workerAt&&Math.abs(Date.now()-SET.workerAt)<60000;
+  const rs=Object.entries(D).filter(([k,r])=>r.ai).sort((a,b)=>a[0]<b[0]?1:-1),cnt=v=>rs.filter(([k,r])=>r.ai.verdict===v).length;
+  const cb=h('input',{type:'checkbox',checked:on,onchange:e=>setAcs(e.target.checked)});
+  main.append(
+    h('div',{className:'pc pset'},
+      h('label',{className:'sw'},cb,h('span',{className:'knob'}),h('b',{textContent:'Auto-Check Assist'})),
+      h('small',{className:'mu',textContent:'When a new report arrives, gpt-oss checks it. If it says yes, the report is marked Valid in yellow.'}),
+      h('small',{className:online?'ok':'bad',textContent:online?'Worker online':'Worker offline. Run ai-assist.py on the PC that has Ollama.'})),
+    h('h2',{className:'sec',textContent:'Results'}),
+    h('div',{className:'grid stats mini'},...[['Checked',rs.length,''],['Said yes',cnt('yes'),'y'],['Said no',cnt('no'),'r']]
+      .map(([l,v,c])=>h('div',{className:'stat '+c},h('div',{className:'n',textContent:v}),h('small',{textContent:l})))),
+    h('h2',{className:'sec',textContent:'Recent checks'}),
+    rs.length?h('div',{className:'list'},...rs.slice(0,30).map(([k,r])=>{
+      const y=r.ai.verdict==='yes',n=r.ai.verdict==='no';
+      return h('div',{className:'row a-'+(y?'ai':n?'denied':'cleared')},
+        h('span',{className:'ic',textContent:y?'✅':n?'❌':'❔'}),
+        h('div',{className:'rb'},h('b',{textContent:`${r.displayName||r.username} (@${r.username}): ${String(r.ai.verdict).toUpperCase()}`}),
+          h('div',{className:'msg',textContent:r.text}),h('div',{className:'msg',textContent:r.ai.reason||''})))
+    })):h('p',{className:'mu',textContent:'Nothing checked yet. Only reports that arrive after the switch is on get checked.'}))}
+
+const busy=()=>{const a=document.activeElement;return!!(a&&a.closest&&a.closest('#main')&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)&&a.type!=='checkbox')};
+const ago=t=>{if(!t)return'never';const x=Math.max(0,Math.round((Date.now()-t)/1000));return x<60?x+'s ago':x<3600?Math.round(x/60)+'m ago':Math.round(x/3600)+'h ago'};
+const BST={ok:['Online','ok'],hopping:['Hopping servers','ok'],disconnected:['Disconnected','bad'],stopped:['Stopped by hand','mu']};
+let lSel=new Set(),bOpen=false,bAnim=false,lAnim=false;
+async function loadLauncher(){
+  try{
+    const[status,settings,accounts,lg,bots]=await Promise.all([api('/launcher/status'),api('/launcher/settings'),api('/launcher/accounts'),api('/launcher/log','GET',undefined,'orderBy=%22%24key%22&limitToLast=20'),api('/bot')]);
+    LCH={status:status||{},settings:settings||{},accounts:accounts||{},log:lg||{}};BOT=bots||{}
+  }catch(e){LCH={err:e.message};BOT={}}}
+async function setLaunch(o){try{await api('/launcher/settings','PATCH',o);Object.assign(LCH.settings??={},o);await loadLauncher();render()}catch(e){alert(e.message)}}
+const botMap=set=>set.bots||(set.bot?{[set.bot.toLowerCase()]:set.bot}:{});
+function botStatus(n){
+  const b=BOT[n.toLowerCase()];
+  if(!b||!b.t)return['No signal yet','bad'];
+  const[t,c]=Date.now()-b.t>120000&&b.state!=='stopped'?['No signal','bad']:(BST[b.state]||[String(b.state),'mu']);
+  return[`${t} · ${ago(b.t)}`,c]}
+async function queueLaunch(list){
+  return api('/launcher/queue','POST',{accounts:list,by:me.k,byName:P[me.k]?.displayName||me.k})}
+function renderLaunch(main){
+  if(LCH.err){main.append(h('p',{className:'bad',textContent:LCH.err+'. Add the launcher and bot rules in Firebase.'}));return}
+  const st=LCH.status||{},set=LCH.settings||{},accs=LCH.accounts||{},bots=botMap(set),online=!!st.workerAt&&Math.abs(Date.now()-st.workerAt)<60000;
+  const names=Object.values(accs).filter(n=>typeof n==='string').sort((a,b)=>a.localeCompare(b));
+  for(const n of[...lSel])if(!names.includes(n))lSel.delete(n);
+  const cb=h('input',{type:'checkbox',checked:!!set.auto,onchange:e=>setLaunch({auto:e.target.checked})});
+
+  // bot picker (zooms in like the filter menu)
+  const bNames=Object.values(bots);
+  const picker=h('div',{style:'position:relative'},h('button',{textContent:(bNames.length?`Bots: ${bNames.join(', ')}`:'Choose bot accounts')+' ▾',
+    onclick:e=>{e.stopPropagation();bOpen=!bOpen;bAnim=bOpen;render()}}));
+  if(bOpen){
+    const pop=h('div',{className:'pop'+(bAnim?' zin':''),onclick:e=>e.stopPropagation()});bAnim=false;
+    if(!names.length)pop.append(h('div',{className:'mu pad',textContent:'Add accounts first.'}));
+    for(const n of names){const k=n.toLowerCase();
+      pop.append(h('label',{className:'it chk'},h('input',{type:'checkbox',checked:!!bots[k],onchange:e=>{const m={...bots};if(e.target.checked)m[k]=n;else delete m[k];setLaunch({bots:Object.keys(m).length?m:null,bot:null})}}),n))}
+    picker.append(pop)}
+
+  const add=h('input',{placeholder:'Account username (as in RAM)',maxLength:20});
+  const addFn=()=>{const n=add.value.trim();if(!/^\w{3,20}$/.test(n))return alert('Usernames are 3 to 20 letters, numbers or _');
+    api('/launcher/accounts/'+n.toLowerCase(),'PUT',n).then(()=>{accs[n.toLowerCase()]=n;LCH.accounts=accs;render()}).catch(e=>alert(e.message))};
+  add.onkeydown=e=>{if(e.key==='Enter')addFn()};
+  const send=async(b,list)=>{b.disabled=true;let key;
+    try{key=(await queueLaunch(list))?.name;b.textContent='Sent'}catch(e){alert('Couldn\u2019t send: '+e.message);b.disabled=false;return}
+    // If the request is still waiting after 12s, the worker never picked it up
+    setTimeout(async()=>{let left=null;try{left=key&&await api('/launcher/queue/'+key)}catch{}
+      if(left){api('/launcher/queue/'+key,'DELETE').catch(()=>{});alert('The launcher worker didn\u2019t pick up the request, so it was cancelled. Check that launcher-worker.py is running (the newest version) and look at its window for errors.')}
+      loadLauncher().then(()=>{if(!busy())render()})},12000)};
+  const launchBtn=n=>{const b=h('button',{textContent:'🚀 Launch',disabled:!online,title:online?'Launch into place '+(st.placeId||''):'Worker offline'});b.onclick=()=>send(b,[n]);return b};
+  const multi=h('button',{textContent:`🚀 Launch selected (${lSel.size})`,disabled:!online||!lSel.size});multi.onclick=()=>send(multi,[...lSel]);
+  const all=h('button',{textContent:lSel.size===names.length&&names.length?'Clear selection':'Select all',onclick:()=>{lSel=lSel.size===names.length?new Set():new Set(names);render()}});
+  const lg=Object.entries(LCH.log||{}).sort((a,b)=>a[0]<b[0]?1:-1);
+  main.append(
+    h('div',{className:'pc pset'},
+      h('small',{className:online?'ok':'bad',textContent:online?`Worker online · always joins place ${st.placeId||'?'}`:'Worker offline. Run launcher-worker.py on the PC with Roblox Account Manager.'}),
+      h('label',{className:'sw'},cb,h('span',{className:'knob'}),h('b',{textContent:'Auto-Call Bot when down'})),
+      h('small',{className:'mu',textContent:'Relaunches any bot account that disconnects or stops checking in for 2 minutes.'}),
+      picker),
+    h('h2',{className:'sec',textContent:'Accounts'}),
+    h('div',{className:'addr'},add,h('button',{textContent:'Add',onclick:addFn})),
+    names.length?h('div',{className:'addr'},multi,all):'',
+    names.length?h('div',{className:'list'+(lAnim?' zin':'')},...names.map(n=>{const isBot=!!bots[n.toLowerCase()],[bs,bc]=botStatus(n),hasHb=!!BOT[n.toLowerCase()];
+      return h('div',{className:'row acc'+(isBot?' a-ai':'')},
+        h('input',{type:'checkbox',checked:lSel.has(n),onchange:e=>{e.target.checked?lSel.add(n):lSel.delete(n);render()}}),
+        h('div',{className:'rb'},h('b',{textContent:n+(isBot?' (bot)':'')}),...(isBot||hasHb?[h('small',{className:bc,style:'display:block',textContent:bs})]:[])),
+        launchBtn(n),
+        h('button',{textContent:'✕',title:'Remove from this list',onclick:()=>{if(confirm(`Remove ${n} from the list?`))api('/launcher/accounts/'+n.toLowerCase(),'DELETE').then(()=>{delete accs[n.toLowerCase()];render()}).catch(e=>alert(e.message))}}))}))
+      :h('p',{className:'mu',textContent:'No accounts yet. Add the usernames from Roblox Account Manager.'}),
+    h('h2',{className:'sec',textContent:'Recent launches'}),
+    lg.length?h('div',{className:'list'},...lg.map(([k,e])=>h('div',{className:'row a-'+(e.ok?'resolved':'denied')},
+      h('span',{className:'ic',textContent:e.ok?'🚀':'⚠️'}),
+      h('div',{className:'rb'},h('b',{textContent:`${e.account}: ${e.reason}`}),h('div',{className:'msg',textContent:e.msg||''})),
+      h('small',{className:'tm',textContent:e.t?new Date(e.t).toLocaleString():''}))))
+      :h('p',{className:'mu',textContent:'No launches yet.'}))}
+
+const CHANGES=[
+  ['1.7.3','2026-10-08',['Fixed: Resolve all valid now starts the 10 second countdown right away, with a live countdown and a Cancel button','Resolve all valid: one button in A.F.R marks every valid report as Resolved (counts in your stats, deleted after 10 seconds)']],
+  ['1.7.2','2026-10-08',['New stats: Users resolved, Users denied and Users valid (how many different players, not reports)']],
+  ['1.7.1','2026-10-07',['Launcher warns you when the worker doesn\u2019t pick up a launch request']],
+  ['1.7','2026-10-07',['Launcher: pick several accounts and launch them together (one after another)','Auto-Call works for several bot accounts at once','Each account shows its own bot status','Bot picker and account list zoom in like the filter menu']],
+  ['1.6.1','2026-10-07',['Click a report image to open it full screen: scroll or pinch to zoom, drag to move, double-click to zoom in']],
+  ['1.6','2026-10-07',['Launcher tab: launch Roblox Account Manager accounts into place 12880465992','Auto-Call Bot when down: relaunches the bot when it disconnects or stops checking in','Bot status (online, hopping, disconnected) from the scanner','Typing in a box is no longer wiped by the auto-refresh']],
+  ['1.5.2','2026-10-07',['Avatar heads now load through the Roblox thumbnail API']],
+  ['1.5.1','2026-10-07',['Fixed: reopening a report now takes it off your stats (a report counts once, for whoever handled it last)']],
+  ['1.5','2026-10-07',['Avatar heads in the user grids, user page and report sidebar','AI Assist tab with Auto-Check Assist (gpt-oss through ai-assist.py); an AI yes shows as yellow Valid','A.F.R filters: Is by word and Is marked','Changelogs tab']],
+  ['1.4','',['Resolve and Deny delete the report after 10 seconds (click the status again to cancel)','Export valid reports as a zip with a folder per username','Change display name and password','Auto-update through the loader file']],
+  ['1.3','',['Profiles login ("Who might you be?") with unique usernames','Personal stats on the Main menu and an All profiles tab','Profile settings: picture and hide stats','History shows who did each action']],
+  ['1.2','',['Darker look with gradients','Left sidebar with Main menu, A.F.R and History']],
+  ['1.1','',['Cropped chat screenshots show up in the report sidebar']],
+  ['1.0','',['Users grid, per-user reports and a sidebar with copyable details','Resolved, Denied, Valid and Delete (2 second confirm)']],
+];
+function renderLog(main){
+  main.append(h('div',{className:'list'},...CHANGES.map(([v,d,items])=>h('div',{className:'pc'},
+    h('div',{className:'hd'},h('b',{textContent:'v'+v}),h('small',{className:'mu',textContent:d})),
+    h('ul',{className:'cl'},...items.map(t=>h('li',{textContent:t}))),...(/1/.test(v)&&/7/.test(v)?[h('div',{className:'wd',title:'W.D. GASTER WAS HERE',textContent:'W.D. GASTER WAS HERE'})]:[])))))}
+
+function renderAll(main){
+  const ps=Object.entries(P);
+  main.append(ps.length?h('div',{className:'grid',style:'grid-template-columns:repeat(auto-fill,minmax(330px,1fr))'},...ps.map(([k,p])=>
+    h('div',{className:'pc'},h('div',{className:'hd'},av(p,44),h('div',{},h('b',{textContent:p.displayName}),h('small',{className:'mu',textContent:'@'+p.username}))),
+      tiles(statsFor(k),p.hidden&&k!==me.k,'mini')))):h('p',{className:'mu',textContent:'No profiles yet.'}))}
+
+function renderProf(main){
+  const p=P[me.k]||{},msg=h('small',{className:'mu'}),say=t=>{msg.textContent=t};
+  const file=h('input',{type:'file',accept:'image/*',hidden:true,onchange:()=>pickPfp(file.files[0])});
+  const cb=h('input',{type:'checkbox',checked:!!p.hidden,onchange:e=>patchMe({hidden:e.target.checked})});
+  const dn=h('input',{value:p.displayName||'',placeholder:'Display name',maxLength:24});
+  const cur=h('input',{type:'password',placeholder:'Current password',autocomplete:'current-password'});
+  const nw=h('input',{type:'password',placeholder:'New password',autocomplete:'new-password'});
+  main.append(h('div',{className:'pc pset'},av(p,96),h('b',{textContent:p.displayName}),h('small',{className:'mu',textContent:'@'+p.username}),
+    h('button',{textContent:'Choose picture',onclick:()=>file.click()}),file,
+    h('label',{className:'chk'},cb,'Hide my stats from other profiles (they see nil)'),
+    h('b',{textContent:'Display name'}),dn,
+    h('button',{textContent:'Save name',onclick:()=>{const d=dn.value.trim();d?patchMe({displayName:d}):say('Name can\u2019t be empty.')}}),
+    h('b',{textContent:'Change password'}),cur,nw,
+    h('button',{textContent:'Change password',onclick:async()=>{
+      if(!nw.value)return say('Type a new password.');
+      const old=await sha(me.k+':'+cur.value);
+      if(old!==p.pass)return say('Current password is wrong.');
+      const nh=await sha(me.k+':'+nw.value);
+      if(await patchMe({pass:nh,prev:old})){ls('me',JSON.stringify({k:me.k,h:nh}));alert('Password changed.')}}}),
+    msg,
+    h('button',{textContent:'Sign out',onclick:signout})))}
+
+const pend={};
+const dlText=k=>`Deleting in ${Math.max(0,Math.ceil((pend[k].at-Date.now())/1000))}s. Click the status again to cancel.`;
+function cancelDel(k){if(pend[k]){clearTimeout(pend[k].id);delete pend[k]}}
+async function resolveAllValid(){
+  const vs=Object.keys(D).filter(k=>D[k].status==='valid');
+  if(!vs.length)return;
+  if(!confirm(`Mark all ${vs.length} valid report${vs.length>1?'s':''} as Resolved?\n\nLike a normal Resolve, they get deleted 10 seconds later. Tip: use "Export valid" first if you want a copy.`))return;
+  const b=$('#rv');b.disabled=true;b.textContent='Resolving...';
+  const up={};for(const k of vs){up[k+'/status']='resolved';up[k+'/aiv']=null}
+  try{await api('/reports','PATCH',up)}catch(e){alert(e.message);render();return}
+  for(const k of vs){D[k].status='resolved';D[k].aiv=null}
+  for(const k of vs)schedDel(k);
+  render();if(sel&&vs.includes(sel))paintSide();
+  await Promise.all(vs.map(k=>{const r=D[k]||{};
+    return api('/history','POST',{action:'resolved',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,by:me.k,byName:P[me.k]?.displayName??me.k,bulk:true,t:{'.sv':'timestamp'}}).catch(()=>{})}));
+  await loadHist();lastStats=0;render()}
+function schedDel(k){
+  cancelDel(k);
+  pend[k]={at:Date.now()+10000,id:setTimeout(async()=>{
+    delete pend[k];
+    try{await api('/reports/'+k,'DELETE');api('/images/'+k,'DELETE').catch(()=>{});delete D[k];if(sel===k)closeSide();else render()}
+    catch(e){stat(e.message,1)}
+  },10000)}}
+
+const PUSH='-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+const pushTime=k=>{let t=0;for(const c of k.slice(0,8))t=t*64+PUSH.indexOf(c);return t};
+const CRC=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let i=0;i<8;i++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=b=>{let c=-1;for(let i=0;i<b.length;i++)c=CRC[(c^b[i])&255]^(c>>>8);return(c^-1)>>>0};
+function zip(files){
+  const te=new TextEncoder(),out=[],cen=[];let off=0;
+  for(const f of files){
+    const nm=te.encode(f.name),crc=crc32(f.data),sz=f.data.length;
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(12,0x21,true);
+    lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);lh.setUint16(26,nm.length,true);
+    out.push(new Uint8Array(lh.buffer),nm,f.data);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint16(14,0x21,true);
+    ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);ch.setUint16(28,nm.length,true);ch.setUint32(42,off,true);
+    cen.push(new Uint8Array(ch.buffer),nm);
+    off+=30+nm.length+sz}
+  const cs=cen.reduce((n,x)=>n+x.length,0),e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);
+  return new Blob([...out,...cen,new Uint8Array(e.buffer)],{type:'application/zip'})}
+
+async function exportValid(){
+  const vs=Object.entries(D).filter(([k,r])=>r.status==='valid');
+  if(!vs.length)return alert('No valid reports to export yet.');
+  const b=$('#ex'),te=new TextEncoder(),pad=n=>String(n).padStart(2,'0'),files=[];
+  b.disabled=true;b.textContent='Exporting...';
+  try{
+    for(const[k,r]of vs){
+      const t=new Date(pushTime(k)),day=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`,tm=`${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+      const dir=String(r.username||r.userId||'unknown').replace(/[^\w.-]/g,'_').replace(/^\.+/,'_'),base=`${dir}/${day}_${tm.replaceAll(':','-')}_${k}`;
+      files.push({name:base+'.txt',data:te.encode(`[${day} ${tm}]\nDisplay Name: ${r.displayName}\nUsername: @${r.username}\nUser ID: ${r.userId}\nWord Detected: ${r.word??''}\nMessage: "${r.text}"\n`)});
+      const im=await api('/images/'+k).catch(()=>null),m=typeof im==='string'&&im.match(/^data:image\/(\w+);base64,(.+)$/);
+      if(m)files.push({name:`${base}.${m[1]==='jpeg'?'jpg':m[1]}`,data:Uint8Array.from(atob(m[2]),c=>c.charCodeAt(0))})
+    }
+    h('a',{href:URL.createObjectURL(zip(files)),download:`valid-reports-${new Date().toISOString().slice(0,10)}.zip`}).click()
+  }catch(e){alert(e.message)}
+  b.disabled=false;render()}
+function pickPfp(f){
+  if(!f)return;const im=new Image();
+  im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=128;const m=Math.min(im.width,im.height);
+    c.getContext('2d').drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,128,128);patchMe({pfp:c.toDataURL('image/jpeg',.85)})};
+  im.src=URL.createObjectURL(f)}
+async function patchMe(o){try{await api('/profiles/'+me.k,'PATCH',o);Object.assign(P[me.k],o);render();return true}catch(e){alert(e.message);return false}}
+
+async function load(){
+  if(!me)return;
+  try{D=await api('/reports')||{};stat('Live')}catch(e){stat(e.message,1);return}
+  try{P=await api('/profiles')||{}}catch{}
+  try{SET=await api('/settings')||{}}catch{}
+  await loadHist();
+  if((view==='home'||view==='all')&&Date.now()-lastStats>60000)await loadStats();
+  if(view==='launch')await loadLauncher();
+  if(sel&&!D[sel])closeSide();else if(!busy())render()}
+
+$('#rf').onclick=load;$('#ex').onclick=exportValid;$('#rv').onclick=resolveAllValid;$('#q').oninput=render;
+$('#back').onclick=()=>{user=null;render()};
+addEventListener('keydown',e=>{if(e.key==='Escape'&&sel)closeSide()});
+addEventListener('click',()=>{if(fOpen){fOpen=false;paintFlt()}if(bOpen){bOpen=false;render()}});
+setInterval(()=>{if(!document.hidden)load()},20000);
+setInterval(()=>{if(!document.hidden&&me&&view==='launch')loadLauncher().then(()=>{if(view==='launch'&&!busy())render()})},5000);
+setInterval(()=>{const n=$('#dl');if(n&&pend[sel])n.textContent=dlText(sel);paintCd()},1000);
+function paintCd(){
+  const ks=Object.keys(pend),c=$('#cd');if(!c)return;
+  if(ks.length<2){c.hidden=true;return}
+  const left=Math.max(0,Math.ceil((Math.max(...ks.map(k=>pend[k].at))-Date.now())/1000));
+  c.hidden=false;c.replaceChildren(h('small',{className:'bad',textContent:`Deleting ${ks.length} reports in ${left}s `}),
+    h('button',{textContent:'Cancel',onclick:()=>{ks.forEach(cancelDel);render()}}));
+  document.querySelectorAll('.tile small').forEach(e=>{e.textContent=e.textContent.replace(/deleting in \d+s/,m=>'deleting in '+left+'s')})}
+let mode='in';
+const err=t=>{$('#err').textContent=t};
+function setMode(m){mode=m;$('#dn').hidden=m==='in';$('#go').textContent=m==='in'?'Sign in':'Create profile';$('#mk').textContent=m==='in'?'Create profile':'Back to sign in';err('')}
+function enter(k,rec){me={k};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load()}
+function signout(){ls('me',null);location.reload()}
+function showLogin(){$('#login').hidden=false}
+$('#mk').onclick=()=>setMode(mode==='in'?'new':'in');
+$('#login').onsubmit=async ev=>{
+  ev.preventDefault();err('');
+  const u=$('#un').value.trim(),pw=$('#pw').value,k=u.toLowerCase();
+  try{
+    if(mode==='in'){
+      const rec=/^\w+$/.test(k)&&await api('/profiles/'+k);
+      if(!rec||rec.pass!==await sha(k+':'+pw))return err('Wrong username or password.');
+      enter(k,rec)
+    }else{
+      const d=$('#dn').value.trim();
+      if(!d||!u||!pw)return err('Fill in all three boxes.');
+      if(!/^\w{3,20}$/.test(u))return err('Username: 3 to 20 letters, numbers or _');
+      if(await api('/profiles/'+k))return err('That username is taken.');
+      const rec={displayName:d,username:u,pass:await sha(k+':'+pw),hidden:false};
+      await api('/profiles/'+k,'PUT',rec);enter(k,rec)
+    }
+  }catch(e){err(e.message)}};
+let sess=null;try{sess=JSON.parse(ls('me'))}catch{}
+if(sess&&/^\w+$/.test(sess.k))api('/profiles/'+sess.k).then(r=>r&&r.pass===sess.h?enter(sess.k,r):showLogin()).catch(showLogin);else showLogin();
+</script>
+</body>
+</html>
