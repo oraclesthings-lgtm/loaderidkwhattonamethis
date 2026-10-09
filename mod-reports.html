@@ -154,6 +154,11 @@ select{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding
 .note .nt{white-space:pre-wrap;word-break:break-word;user-select:text}
 .note .nx{background:none;border:0;padding:0 2px;color:var(--mu);margin-left:auto;cursor:pointer}
 .nin{display:flex;gap:6px;margin-top:6px}
+.nimg{display:block;max-width:100%;max-height:180px;margin-top:6px;border-radius:6px;cursor:zoom-in}
+.npv{position:relative;display:inline-block;margin-top:6px}
+.npv img{display:block;max-height:90px;border-radius:6px;border:1px solid var(--line);cursor:zoom-in}
+.npv .nx{position:absolute;top:2px;right:2px;background:#000a;border-radius:4px;color:#fff;padding:0 5px}
+.over .notes{outline:2px dashed var(--ac)}
 .nin textarea{flex:1;min-width:0;resize:none;height:38px;background:#0e1420;border:1px solid var(--line);border-radius:6px;padding:8px 10px;color:inherit;font:inherit}
 #zm{position:fixed;inset:0;z-index:50;background:#000d;overflow:hidden;cursor:grab;touch-action:none;animation:zin .18s ease-out}
 #zm img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;user-select:none;-webkit-user-drag:none}
@@ -395,15 +400,28 @@ function paintSide(){
     }).catch(()=>{const b=$('#side .noimg');if(sel===id&&b)b.textContent='No image'})}}
 
 let NOTES={},notesFor=null;
+// Shrink a picture so it fits in the database (max 1280px, JPEG)
+function shrinkImage(file,max=1280){
+  return new Promise((ok,bad)=>{const im=new Image();
+    im.onload=()=>{const sc=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*sc);c.height=Math.round(im.height*sc);
+      c.getContext('2d').drawImage(im,0,0,c.width,c.height);let q=.85,d=c.toDataURL('image/jpeg',q);while(d.length>380000&&q>.4){q-=.1;d=c.toDataURL('image/jpeg',q)}URL.revokeObjectURL(im.src);ok(d)};
+    im.onerror=()=>bad(new Error('That file isn’t a picture.'));im.src=URL.createObjectURL(file)})}
 function notesBox(k){
   const list=h('div',{className:'notes',id:'nl'},h('small',{className:'mu',textContent:'Loading notes...'}));
-  const ta=h('textarea',{placeholder:'Write a note...',title:'Enter to send, Shift+Enter for a new line',maxLength:1000});
-  const send=async()=>{const t=ta.value.trim();if(!t)return;ta.disabled=true;
-    try{await api('/notes/'+k,'POST',{by:me.k,byName:P[me.k]?.displayName||me.k,text:t,t:{'.sv':'timestamp'}});ta.value='';await loadNotes(k)}catch(e){alert(e.message)}
+  const ta=h('textarea',{placeholder:'Write a note...',title:'Enter to send, Shift+Enter for a new line. Paste or drop a picture to attach it.',maxLength:1000});
+  let pic=null;const prev=h('div',{className:'npv',hidden:true});
+  const setPic=d=>{pic=d;prev.hidden=!d;prev.replaceChildren(...(d?[h('img',{src:d,onclick:()=>openZoom(d)}),h('button',{className:'nx',textContent:'✕',title:'Remove picture',onclick:()=>setPic(null)})]:[]))};
+  const addFile=async f=>{if(!f||!/^image\//.test(f.type))return alert('Only pictures can be attached.');try{setPic(await shrinkImage(f))}catch(e){alert(e.message)}};
+  const file=h('input',{type:'file',accept:'image/*',hidden:true,onchange:()=>{addFile(file.files[0]);file.value=''}});
+  const send=async()=>{const t=ta.value.trim();if(!t&&!pic)return;ta.disabled=true;
+    try{await api('/notes/'+k,'POST',{by:me.k,byName:P[me.k]?.displayName||me.k,text:t,...(pic?{img:pic}:{}),t:{'.sv':'timestamp'}});ta.value='';setPic(null);await loadNotes(k)}catch(e){alert(e.message)}
     ta.disabled=false;ta.focus()};
   ta.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}};
-  notesFor=k;loadNotes(k);
-  return h('div',{},list,h('div',{className:'nin'},ta,h('button',{textContent:'Send',onclick:send})))}
+  ta.onpaste=e=>{const f=[...(e.clipboardData?.files||[])].find(f=>/^image\//.test(f.type));if(f){e.preventDefault();addFile(f)}};
+  const wrap=h('div',{},list,prev,h('div',{className:'nin'},h('button',{textContent:'📎',title:'Attach a picture',onclick:()=>file.click()}),file,ta,h('button',{textContent:'Send',onclick:send})));
+  wrap.ondragover=e=>{e.preventDefault();wrap.classList.add('over')};wrap.ondragleave=()=>wrap.classList.remove('over');
+  wrap.ondrop=e=>{e.preventDefault();wrap.classList.remove('over');addFile(e.dataTransfer.files[0])};
+  notesFor=k;loadNotes(k);return wrap}
 async function loadNotes(k){
   let n={};try{n=await api('/notes/'+k)||{}}catch{}
   NOTES[k]=n;const list=$('#nl');if(!list||sel!==k)return;
@@ -412,7 +430,7 @@ async function loadNotes(k){
     return h('div',{className:'note'+(x.by===me.k?' mine':'')},av(p||{displayName:x.byName},26),
       h('div',{className:'nb'},h('small',{},h('b',{textContent:p?.displayName||x.byName||x.by}),h('span',{textContent:x.t?new Date(x.t).toLocaleString():''}),
         ...(x.by===me.k?[h('button',{className:'nx',textContent:'✕',title:'Delete my note',onclick:()=>{if(confirm('Delete this note?'))api(`/notes/${k}/${id}`,'DELETE').then(()=>loadNotes(k)).catch(e=>alert(e.message))}})]:[])),
-        h('div',{className:'nt',textContent:x.text})))}):[h('small',{className:'mu',textContent:'No notes yet. Leave one for the other mods.'})]));
+        ...(x.text?[h('div',{className:'nt',textContent:x.text})]:[]),...(x.img?[h('img',{className:'nimg',src:x.img,title:'Click to zoom',onclick:()=>openZoom(x.img)})]:[])))}):[h('small',{className:'mu',textContent:'No notes yet. Leave one for the other mods.'})]));
   if(near)list.scrollTop=list.scrollHeight}
 setInterval(()=>{if(sel&&notesFor===sel&&!document.hidden)loadNotes(sel)},5000);
 
@@ -597,6 +615,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['2.1','2026-10-09',['Attach pictures to notes: \ud83d\udcce button, paste or drag and drop','Note pictures show up in the Report/Arrest Case files']],
   ['2.0','2026-10-09',['Notes chat on every report: leave notes for the other mods (updates every 5 seconds, delete your own)','Report/Arrest Case files show who validated each report, plus the report\u2019s notes']],
   ['1.9.5','2026-10-09',['Download all of a player\u2019s valid reports from their page in A.F.R, as Zip or HTML']],
   ['1.9.4','2026-10-09',['Download report now zooms into two choices: As Zip or As HTML']],
@@ -740,7 +759,7 @@ function playerSection(p,i){
     if(!(key in idx)){idx[key]=ch.length;ch.push({reason:key,n:0,d:R?R[1]:0,h:R?R[2]:0,first:r.t,missing:!R})}
     const c=ch[idx[key]];c.n++;d+=c.d;hr+=c.h}
   const rows=ch.map((c,j)=>`<tr><td class="n">${j+1}</td><td${c.missing?' class="warn"':''}>${esc(c.reason)}${c.n>1?` <b>x${c.n}</b>`:''}</td><td class="n">${dur(c.d,c.h)}${c.n>1?` <b>x${c.n}</b> = ${dur(c.d*c.n,c.h*c.n)}`:''}</td><td>${esc(fmtT(c.first))}</td></tr>`).join('');
-  const ev=p.reports.map((r,j)=>`<tr><td class="n">${j+1}</td><td>${esc(fmtT(r.t))}</td><td>${esc(r.word)}</td><td>&ldquo;${esc(r.text)}&rdquo;${r.notes?.length?`<div class="nts">${r.notes.map(n=>`<div><b>${esc(n.byName||n.by)}:</b> ${esc(n.text)}</div>`).join('')}</div>`:''}</td><td>${esc(r.vb||'Unknown')}</td><td class="im">${r.img?`<img src="${r.img}" alt="Screenshot of evidence ${j+1}" title="Click to enlarge">`:'<span class="warn">No image captured</span>'}</td></tr>`).join('');
+  const ev=p.reports.map((r,j)=>`<tr><td class="n">${j+1}</td><td>${esc(fmtT(r.t))}</td><td>${esc(r.word)}</td><td>&ldquo;${esc(r.text)}&rdquo;${r.notes?.length?`<div class="nts">${r.notes.map(n=>`<div><b>${esc(n.byName||n.by)}:</b> ${esc(n.text)}${n.img?`<span class="im"><img src="${n.img}" alt="Picture attached to a note" title="Click to enlarge" style="max-width:160px;margin-top:4px"></span>`:''}</div>`).join('')}</div>`:''}</td><td>${esc(r.vb||'Unknown')}</td><td class="im">${r.img?`<img src="${r.img}" alt="Screenshot of evidence ${j+1}" title="Click to enlarge">`:'<span class="warn">No image captured</span>'}</td></tr>`).join('');
   const noImg=p.reports.filter(r=>!r.img).length;
   return {d,hr,html:`<h2>Defendant ${i?'#'+i+': ':''}${esc(p.displayName)} (@${esc(p.username)})</h2>
 <table><tr><th>Display name</th><td>${esc(p.displayName)}</td></tr><tr><th>Validated by</th><td>${esc([...new Set(p.reports.map(r=>r.vb||'Unknown'))].join(', '))}</td></tr><tr><th>Username</th><td>@${esc(p.username)}</td></tr><tr><th>User ID</th><td class="mono">${esc(p.userId)}</td></tr><tr><th>Counts</th><td>${p.reports.length} valid report${p.reports.length>1?'s':''}</td></tr></table>
