@@ -112,6 +112,22 @@ body.open aside{transform:none}
 .stat.y{background:linear-gradient(145deg,#5a4510,#0f1522)}
 .row.a-ai{border-left-color:#e0b020}
 .wd{margin-top:10px;font-family:Wingdings,'Wingdings 2','Wingdings 3',sans-serif;font-size:18px;letter-spacing:2px;color:var(--mu)}
+.pie{display:flex;flex-wrap:wrap;gap:24px;align-items:center;padding:16px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(145deg,#151c2d,#0e1420)}
+.pie svg{width:200px;height:200px;flex:none}
+.pie circle.seg{fill:none;stroke-width:34;transition:stroke-width .15s}
+.pie circle.seg:hover{stroke-width:40}
+.pie .ctr{fill:var(--tx);font-size:26px;font-weight:700;text-anchor:middle}
+.pie .ctr2{fill:var(--mu);font-size:12px;text-anchor:middle}
+.lg{display:grid;gap:6px;min-width:200px;max-width:360px;flex:1}
+.lg div{display:flex;align-items:center;gap:8px}
+.lg i{width:12px;height:12px;border-radius:3px;flex:none}
+.lg b{flex:1;font-weight:500}
+.seg2{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.seg2 button{border:0;border-radius:0;background:none;padding:7px 14px}
+.seg2 button.on{background:linear-gradient(135deg,#3b55c9,#6b44c8)}
+.pin{animation:pin .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes pin{from{opacity:0;transform:rotate(-120deg) scale(.6)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.pin{animation:none}}
 .cl{margin:0;padding-left:18px;display:grid;gap:4px}
 .ok{color:#4bd18b}
 .bad{color:#ff9a9a}
@@ -206,7 +222,7 @@ async function loadHist(){
   try{H=await api('/history','GET',undefined,'orderBy=%22%24key%22&limitToLast=200')||{};hErr=false}catch{hErr=true}}
 async function log(action,r,k){
   try{
-    await api('/history','POST',{action,reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,by:me.k,byName:P[me.k]?.displayName??me.k,t:{'.sv':'timestamp'}});
+    await api('/history','POST',{action,reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,by:me.k,byName:P[me.k]?.displayName??me.k,t:{'.sv':'timestamp'}});
     await loadHist();render()
   }catch{}}
 
@@ -239,7 +255,42 @@ function renderHome(main){
   const S=[['Open',rs.filter(r=>!r.status).length,'o'],['Resolved',n('resolved'),'g'],['Denied',n('denied'),'r'],['Valid, can\u2019t act yet',n('valid'),'v'],['AI valid',rs.filter(r=>r.aiv).length,'y'],['Total reports',rs.length,''],['Users flagged',groups().length,'']];
   main.append(
     h('h2',{textContent:'Your stats'}),tiles(statsFor(me.k)),h('h2',{className:'sec',textContent:'Reports overview'}),h('div',{className:'grid stats'},...S.map(([l,v,c])=>h('div',{className:'stat '+c},h('div',{className:'n',textContent:v}),h('small',{textContent:l})))),
+    h('h2',{className:'sec',textContent:'Flagged words'}),pieChart(),
     h('h2',{className:'sec',textContent:'Recent activity'}),histList(6))}
+
+let pieMode='reports',pieAnim=true;
+const PIE_COLORS=['#6f8cff','#f0c040','#2fbf70','#e25b5b','#b07cff','#3ec7d6','#ff9a4a'];
+function wordData(mode){
+  // Current reports plus handled ones from History (so deleted reports still count)
+  const seen=new Map();
+  for(const k in D){const r=D[k];if(r.word)seen.set(k,{w:r.word,u:String(r.userId??r.username)})}
+  for(const id in HA){const e=HA[id],rid=e.reportId||id;if(e.word&&!seen.has(rid))seen.set(rid,{w:e.word,u:String(e.userId??e.username)})}
+  const c={};
+  if(mode==='reports')for(const v of seen.values())c[v.w]=(c[v.w]||0)+1;
+  else{const pairs=new Set();for(const v of seen.values())pairs.add(v.w+'\u0000'+v.u);for(const p of pairs){const w=p.split('\u0000')[0];c[w]=(c[w]||0)+1}}
+  let rows=Object.entries(c).sort((a,b)=>b[1]-a[1]);
+  if(rows.length>7){const rest=rows.slice(6).reduce((n,r)=>n+r[1],0);rows=[...rows.slice(0,6),['Other',rest]]}
+  rows.users=new Set([...seen.values()].map(v=>v.u)).size;
+  return rows}
+function pieChart(){
+  const rows=wordData(pieMode),order=wordData('reports').map(r=>r[0]),col=w=>w==='Other'?'#4a5670':PIE_COLORS[Math.max(0,order.indexOf(w))%7],total=rows.reduce((n,r)=>n+r[1],0),NS='http://www.w3.org/2000/svg',R=70,C=2*Math.PI*R;
+  const sw=h('div',{className:'seg2'},...[['reports','Reports'],['users','Users']].map(([m,l])=>h('button',{className:pieMode===m?'on':'',textContent:l,onclick:()=>{
+    if(pieMode===m)return;const box=$('#pieBox');if(box)box.classList.add('zout');setTimeout(()=>{pieMode=m;pieAnim=true;render()},170)}})));
+  if(!total)return h('div',{},sw,h('p',{className:'mu',textContent:'No flagged words yet.'}));
+  const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 200 200');svg.setAttribute('role','img');
+  svg.setAttribute('aria-label',`Flagged words by ${pieMode}`);
+  if(pieAnim)svg.classList.add('pin');
+  let off=0;
+  rows.forEach(([w,n],i)=>{
+    const len=n/total*C,el=document.createElementNS(NS,'circle');
+    Object.entries({cx:100,cy:100,r:R,class:'seg',stroke:col(w),'stroke-dasharray':`${Math.max(len-1.5,.5)} ${C}`,'stroke-dashoffset':-off,transform:'rotate(-90 100 100)'}).forEach(([a,v])=>el.setAttribute(a,v));
+    const t=document.createElementNS(NS,'title');t.textContent=`${w}: ${n} (${(n/total*100).toFixed(1)}%)`;el.append(t);svg.append(el);off+=len});
+  const tx=(y,cls,txt)=>{const t=document.createElementNS(NS,'text');t.setAttribute('x',100);t.setAttribute('y',y);t.setAttribute('class',cls);t.textContent=txt;return t};
+  svg.append(tx(104,'ctr',pieMode==='reports'?total:rows.users),tx(124,'ctr2',pieMode==='reports'?'reports':'users'));
+  const lg=h('div',{className:'lg'},...rows.map(([w,n],i)=>h('div',{},h('i',{style:`background:${col(w)}`}),h('b',{textContent:w}),
+    h('span',{textContent:`${(n/total*100).toFixed(1)}%`}),h('small',{className:'mu',textContent:`(${n})`}))));
+  const box=h('div',{id:'pieBox',className:'pie'+(pieAnim?' zin':'')},svg,lg);pieAnim=false;
+  return h('div',{},sw,box,pieMode==='users'?h('small',{className:'mu',style:'display:block;margin-top:6px',textContent:'A player flagged for two different words counts once in each.'}):'')}
 
 function renderHist(main){main.append(histList(200))}
 
@@ -510,6 +561,10 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['1.9.2','2026-10-09',['Renamed the case file to Report/Arrest Case']],
+  ['1.9.1','2026-10-09',['ARREST CASE files now include the screenshot for each piece of evidence (click to enlarge) and flag reports with no screenshot','Added reasons for yam and jaboner (+3 Days each)']],
+  ['1.9','2026-10-09',['Export valid now includes an ARREST CASE file: word violations (amount and %), each player\u2019s charges oldest first (repeats shown as x2, x3...), evidence and total time required','Each player folder also gets its own ARREST CASE file']],
+  ['1.8','2026-10-09',['Main menu pie chart: which words reports were flagged for, by reports or by users','History now remembers the flagged word, so handled reports keep counting in the chart']],
   ['1.7.4','2026-10-09',['Whoever marked a report Valid keeps the Valid credit when someone else resolves it later']],
   ['1.7.3','2026-10-08',['Fixed: Resolve all valid now starts the 10 second countdown right away, with a live countdown and a Cancel button','Resolve all valid: one button in A.F.R marks every valid report as Resolved (counts in your stats, deleted after 10 seconds)']],
   ['1.7.2','2026-10-08',['New stats: Users resolved, Users denied and Users valid (how many different players, not reports)']],
@@ -573,7 +628,7 @@ async function resolveAllValid(){
   for(const k of vs)schedDel(k);
   render();if(sel&&vs.includes(sel))paintSide();
   await Promise.all(vs.map(k=>{const r=D[k]||{};
-    return api('/history','POST',{action:'resolved',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,by:me.k,byName:P[me.k]?.displayName??me.k,bulk:true,t:{'.sv':'timestamp'}}).catch(()=>{})}));
+    return api('/history','POST',{action:'resolved',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,by:me.k,byName:P[me.k]?.displayName??me.k,bulk:true,t:{'.sv':'timestamp'}}).catch(()=>{})}));
   await loadHist();lastStats=0;render()}
 function schedDel(k){
   cancelDel(k);
@@ -604,19 +659,85 @@ function zip(files){
   e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);
   return new Blob([...out,...cen,new Uint8Array(e.buffer)],{type:'application/zip'})}
 
+// Charges for the Arrest Case file: word -> [reason, days, hours]
+const REASONS={
+  'crack':['Player has said crack in either a sexual context, or drugs context: Inappropriate Behaviour',3,0],
+  'cracking':['Player has said cracking in a sexual context: Inappropriate Behaviour',3,0],
+  'cracked':['Player has said cracked in a sexual context: Inappropriate Behaviour',3,0],
+  'crackable':['Player used "crackable" in either sexual context or drugs context: Inappropriate Behaviour',3,0],
+  'mommy':['Player has said "mommy", in either an uncomfortable way for another Player, or in a weird context: Inappropriate Behaviour',3,0],
+  'yams':['Player has said "yams", in a sexual context: Inappropriate Behaviour',3,0],
+  'yam':['Player has said "yam", in a sexual context: Inappropriate Behaviour',3,0],
+  'jaboner':['Player has said "jaboner" in a sexual context: Inappropriate Behaviour',3,0],
+  'glue':['Player has said "glue", in a sexual context: Inappropriate Behaviour',3,0],
+  'search history':['Player has made a search history joke: Unallowed/Inappropriate Behaviour',0,5],
+  'deltahub':['Player has said "Deltahub", a fictional site reference to an 18+ site: Inappropriate Behaviour',3,0],
+  'searching':['Player has made a search history joke: Unallowed/Inappropriate Behaviour',0,5],
+  'searched':['Player has made a search history joke: Unallowed/Inappropriate Behaviour',0,5],
+  'corn':['Player bypassed the word "porn" by using corn: Inappropriate Behaviour + Filter bypass',5,0],
+  '34':['Player has said "34" referencing an 18+ site called rule34: Inappropriate Behaviour',3,0],
+  'fanart':['Player has said "fanart", while implying sexual art: Inappropriate Behaviour',3,0],
+  'fanarts':['Player has said "fanarts", while implying sexual art: Inappropriate Behaviour',3,0],
+  '34r':['Player has said "34r" referencing an 18+ site called rule34: Inappropriate Behaviour',3,0],
+};
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dur=(d,hr)=>{d+=Math.floor(hr/24);hr%=24;const p=[];if(d)p.push(`${d} Day${d>1?'s':''}`);if(hr)p.push(`${hr}h`);return p.length?'+'+p.join(' '):'+0'};
+const fmtT=t=>new Date(t).toLocaleString();
+function caseHTML(title,sub,body){return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+body{font:15px/1.5 Georgia,'Times New Roman',serif;color:#111;background:#f4f1e8;margin:0;padding:32px 16px}
+.doc{max-width:860px;margin:auto;background:#fff;border:1px solid #bbb;padding:40px 48px;box-shadow:0 4px 20px #0002}
+h1{font-size:30px;letter-spacing:2px;margin:0;text-align:center}.sub{text-align:center;color:#555;margin:4px 0 24px}
+h2{font-size:19px;border-bottom:2px solid #111;padding-bottom:4px;margin-top:34px}h3{font-size:16px;margin:22px 0 6px}
+table{border-collapse:collapse;width:100%;margin:8px 0}th,td{border:1px solid #999;padding:6px 8px;text-align:left;vertical-align:top}th{background:#eee}
+td.n,th.n{text-align:right;white-space:nowrap}.tot td{font-weight:bold;background:#f6f6f6}.mono{font-family:Consolas,monospace}
+.ev{font-size:13px;color:#333}.im{width:240px}.im img{display:block;max-width:240px;border:1px solid #999;cursor:zoom-in}.im img.big{position:fixed;inset:0;margin:auto;max-width:95vw;max-height:95vh;z-index:9;cursor:zoom-out;box-shadow:0 0 0 100vmax #000c}.ev td{font-size:13px}.warn{color:#a00}.sig{margin-top:40px;color:#555;font-size:13px}
+@media print{body{background:#fff;padding:0}.doc{border:0;box-shadow:none}}
+</style></head><body><div class="doc"><h1>${esc(title)}</h1><div class="sub">${sub}</div>${body}</div><script>document.addEventListener('click',e=>{const i=e.target.closest('.im img');document.querySelectorAll('.im img.big').forEach(x=>{if(x!==i)x.classList.remove('big')});if(i)i.classList.toggle('big')})<\/script></body></html>`}
+function playerSection(p,i){
+  const ch=[],idx={};let d=0,hr=0;
+  for(const r of p.reports){
+    const R=REASONS[String(r.word||'').toLowerCase()],key=R?R[0]:`No reason set for the word "${r.word||'?'}"`;
+    if(!(key in idx)){idx[key]=ch.length;ch.push({reason:key,n:0,d:R?R[1]:0,h:R?R[2]:0,first:r.t,missing:!R})}
+    const c=ch[idx[key]];c.n++;d+=c.d;hr+=c.h}
+  const rows=ch.map((c,j)=>`<tr><td class="n">${j+1}</td><td${c.missing?' class="warn"':''}>${esc(c.reason)}${c.n>1?` <b>x${c.n}</b>`:''}</td><td class="n">${dur(c.d,c.h)}${c.n>1?` <b>x${c.n}</b> = ${dur(c.d*c.n,c.h*c.n)}`:''}</td><td>${esc(fmtT(c.first))}</td></tr>`).join('');
+  const ev=p.reports.map((r,j)=>`<tr><td class="n">${j+1}</td><td>${esc(fmtT(r.t))}</td><td>${esc(r.word)}</td><td>&ldquo;${esc(r.text)}&rdquo;</td><td class="im">${r.img?`<img src="${r.img}" alt="Screenshot of evidence ${j+1}" title="Click to enlarge">`:'<span class="warn">No image captured</span>'}</td></tr>`).join('');
+  const noImg=p.reports.filter(r=>!r.img).length;
+  return {d,hr,html:`<h2>Defendant ${i?'#'+i+': ':''}${esc(p.displayName)} (@${esc(p.username)})</h2>
+<table><tr><th>Display name</th><td>${esc(p.displayName)}</td></tr><tr><th>Username</th><td>@${esc(p.username)}</td></tr><tr><th>User ID</th><td class="mono">${esc(p.userId)}</td></tr><tr><th>Counts</th><td>${p.reports.length} valid report${p.reports.length>1?'s':''}</td></tr></table>
+<h3>Charges (oldest first)</h3><table><tr><th class="n">#</th><th>Reason</th><th class="n">Time</th><th>First offence</th></tr>${rows}<tr class="tot"><td></td><td>Total time required</td><td class="n">${dur(d,hr)}</td><td></td></tr></table>
+<h3>Evidence</h3>${noImg?`<p class="warn">${noImg} of ${p.reports.length} report${p.reports.length>1?'s have':' has'} no screenshot.</p>`:''}<table class="ev"><tr><th class="n">#</th><th>Date</th><th>Word</th><th>Message</th><th>Image evidence</th></tr>${ev}</table>`}}
+function buildCases(players){
+  const now=new Date(),pad=n=>String(n).padStart(2,'0'),no=`MR-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`,by=esc(P[me.k]?.displayName||me.k);
+  const all=players.flatMap(p=>p.reports),cnt={};for(const r of all)cnt[r.word||'?']=(cnt[r.word||'?']||0)+1;
+  const wr=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).map(([w,n])=>`<tr><td>${esc(w)}${REASONS[w.toLowerCase()]?'':' <span class="warn">(no reason set)</span>'}</td><td class="n">${n}</td><td class="n">${(n/all.length*100).toFixed(1)}%</td></tr>`).join('');
+  let D2=0,H2=0;const secs=players.map((p,i)=>{const s=playerSection(p,i+1);D2+=s.d;H2+=s.hr;return s.html});
+  const sum=players.map((p,i)=>{const s=playerSection(p,0);return `<tr><td class="n">${i+1}</td><td>${esc(p.displayName)} (@${esc(p.username)})</td><td class="mono">${esc(p.userId)}</td><td class="n">${p.reports.length}</td><td class="n">${dur(s.d,s.hr)}</td></tr>`}).join('');
+  const main=caseHTML('REPORT/ARREST CASE',`Case ${no} &middot; ${players.length} defendant${players.length>1?'s':''} &middot; prepared by ${by} on ${esc(now.toLocaleString())}`,
+`<h2>Word violations</h2><table><tr><th>Word</th><th class="n">Amount</th><th class="n">%</th></tr>${wr}<tr class="tot"><td>Total</td><td class="n">${all.length}</td><td class="n">100%</td></tr></table>
+<h2>Defendants</h2><table><tr><th class="n">#</th><th>Player</th><th>User ID</th><th class="n">Reports</th><th class="n">Time required</th></tr>${sum}</table>
+${secs.join('')}<div class="sig">Generated from the Mod Reports dashboard. All reports listed were marked Valid by a moderator.</div>`);
+  const per=players.map((p,i)=>({dir:p.dir,html:caseHTML(`REPORT/ARREST CASE`,`Case ${no}-${i+1} &middot; @${esc(p.username)} &middot; prepared by ${by} on ${esc(now.toLocaleString())}`,playerSection(p,0).html)}));
+  return{main,per}}
+
 async function exportValid(){
   const vs=Object.entries(D).filter(([k,r])=>r.status==='valid');
   if(!vs.length)return alert('No valid reports to export yet.');
-  const b=$('#ex'),te=new TextEncoder(),pad=n=>String(n).padStart(2,'0'),files=[];
+  const b=$('#ex'),te=new TextEncoder(),pad=n=>String(n).padStart(2,'0'),files=[],pl={};
   b.disabled=true;b.textContent='Exporting...';
   try{
     for(const[k,r]of vs){
       const t=new Date(pushTime(k)),day=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`,tm=`${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
       const dir=String(r.username||r.userId||'unknown').replace(/[^\w.-]/g,'_').replace(/^\.+/,'_'),base=`${dir}/${day}_${tm.replaceAll(':','-')}_${k}`;
+      const pk=String(r.userId??r.username);const rec={t:pushTime(k),word:r.word,text:r.text,img:null};(pl[pk]??={displayName:r.displayName,username:r.username,userId:r.userId,dir,reports:[]}).reports.push(rec);
       files.push({name:base+'.txt',data:te.encode(`[${day} ${tm}]\nDisplay Name: ${r.displayName}\nUsername: @${r.username}\nUser ID: ${r.userId}\nWord Detected: ${r.word??''}\nMessage: "${r.text}"\n`)});
       const im=await api('/images/'+k).catch(()=>null),m=typeof im==='string'&&im.match(/^data:image\/(\w+);base64,(.+)$/);
+      if(m)rec.img=im;
       if(m)files.push({name:`${base}.${m[1]==='jpeg'?'jpg':m[1]}`,data:Uint8Array.from(atob(m[2]),c=>c.charCodeAt(0))})
     }
+    const players=Object.values(pl);players.forEach(p=>p.reports.sort((a,b)=>a.t-b.t));players.sort((a,b)=>a.reports[0].t-b.reports[0].t);
+    const cs=buildCases(players);
+    files.unshift({name:'REPORT-ARREST CASE.html',data:te.encode(cs.main)});
+    for(const c of cs.per)files.push({name:`${c.dir}/REPORT-ARREST CASE - ${c.dir}.html`,data:te.encode(c.html)});
     h('a',{href:URL.createObjectURL(zip(files)),download:`valid-reports-${new Date().toISOString().slice(0,10)}.zip`}).click()
   }catch(e){alert(e.message)}
   b.disabled=false;render()}
