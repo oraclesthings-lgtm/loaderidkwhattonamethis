@@ -145,6 +145,16 @@ select{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding
 .row.acc b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 #fw{position:relative}
 .shot{cursor:zoom-in}
+.notes{display:grid;gap:8px;max-height:260px;overflow:auto;padding:8px;background:#080b11;border:1px solid var(--line);border-radius:6px;margin-top:4px}
+.note{display:flex;gap:8px;align-items:flex-start}
+.note .nb{flex:1;min-width:0;background:#141b2b;border-radius:8px;padding:6px 9px}
+.note.mine .nb{background:linear-gradient(135deg,#25306a,#1d1f45)}
+.note .nb small{display:flex;gap:6px;color:var(--mu);font-size:11px}
+.note .nb small b{color:var(--tx);font-weight:600}
+.note .nt{white-space:pre-wrap;word-break:break-word;user-select:text}
+.note .nx{background:none;border:0;padding:0 2px;color:var(--mu);margin-left:auto;cursor:pointer}
+.nin{display:flex;gap:6px;margin-top:6px}
+.nin textarea{flex:1;min-width:0;resize:none;height:38px;background:#0e1420;border:1px solid var(--line);border-radius:6px;padding:8px 10px;color:inherit;font:inherit}
 #zm{position:fixed;inset:0;z-index:50;background:#000d;overflow:hidden;cursor:grab;touch-action:none;animation:zin .18s ease-out}
 #zm img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;user-select:none;-webkit-user-drag:none}
 #zm .zb{position:fixed;top:12px;right:12px;display:flex;gap:6px;z-index:51}
@@ -316,7 +326,9 @@ function renderAfr(main){
       :h('p',{className:'mu',textContent:Object.keys(D).length?'No user matches that search.':'No reports yet. New ones show up here after the scanner uploads them.'}));
   }else{
     const g=gs.find(x=>x.id===user);if(!g){user=null;return render()}
-    main.append(h('div',{className:'tl',style:'margin-bottom:14px'},head(g.id,48,g.name||g.user),h('h2',{style:'margin:0',textContent:`${g.name||g.user} (@${g.user})`})),h('div',{className:'grid'},...g.list.map(r=>
+    const nv=g.list.filter(r=>r.status==='valid').length,gid=g.id;
+    main.append(h('div',{className:'tl',style:'margin-bottom:14px;flex-wrap:wrap'},head(g.id,48,g.name||g.user),h('h2',{style:'margin:0;flex:1',textContent:`${g.name||g.user} (@${g.user})`}),
+      nv?h('div',{style:'min-width:300px'},dlPicker(()=>Object.entries(D).filter(([k,r])=>r.status==='valid'&&String(r.userId??r.username)===gid),`valid-reports-${g.user||g.id}`,`⬇ Download all valid (${nv})`)):''),h('div',{className:'grid'},...g.list.map(r=>
       h('button',{className:`tile s-${r.aiv?'ai':(r.status||'none')}${r.k===sel?' sel':''}`,onclick:()=>openSide(r.k)},
         h('small',{textContent:(r.word?`Flagged: ${r.word}`:'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),h('div',{className:'msg',textContent:r.text})))));
   }}
@@ -370,10 +382,11 @@ function paintSide(){
     img,f('Display name',r.displayName),f('Username',r.username),f('User ID',r.userId),
     h('div',{className:'f'},h('small',{textContent:'Message'}),h('div',{className:'m',textContent:r.text})),
     ...(r.ai?[h('div',{className:'f'},h('small',{textContent:'AI check'}),h('div',{className:'m',textContent:`${String(r.ai.verdict).toUpperCase()}: ${r.ai.reason||''}`}))]:[]),
+    h('div',{className:'f'},h('small',{textContent:'Notes'}),notesBox(sel)),
     h('div',{className:'acts'},sb('resolved','ok','✅ Resolved','Resolved'),sb('denied','no','❌ Denied','Denied'),sb('valid',r.aiv?'va ai':'va','👍 Valid','Valid, can\u2019t act on it now')),
     h('small',{id:'dl',className:'mu',textContent:pend[sel]?dlText(sel):''}),
     h('div',{className:'acts'},del,can),
-    h('div',{className:'acts'},h('button',{textContent:'⬇ Download report',title:'Zip with the report, its screenshot and a Report/Arrest Case file',onclick:e=>downloadReport(sel,e.currentTarget)})));
+    dlPicker((k=>()=>D[k]?[[k,D[k]]]:[])(sel),`report-${r.username||r.userId}-${sel}`,'⬇ Download report'));
   if(!src){const id=sel;
     api('/images/'+id).then(d=>{
       const b=$('#side .noimg');if(sel!==id||!b)return;
@@ -381,14 +394,36 @@ function paintSide(){
       else b.textContent='No image'
     }).catch(()=>{const b=$('#side .noimg');if(sel===id&&b)b.textContent='No image'})}}
 
+let NOTES={},notesFor=null;
+function notesBox(k){
+  const list=h('div',{className:'notes',id:'nl'},h('small',{className:'mu',textContent:'Loading notes...'}));
+  const ta=h('textarea',{placeholder:'Write a note...',title:'Enter to send, Shift+Enter for a new line',maxLength:1000});
+  const send=async()=>{const t=ta.value.trim();if(!t)return;ta.disabled=true;
+    try{await api('/notes/'+k,'POST',{by:me.k,byName:P[me.k]?.displayName||me.k,text:t,t:{'.sv':'timestamp'}});ta.value='';await loadNotes(k)}catch(e){alert(e.message)}
+    ta.disabled=false;ta.focus()};
+  ta.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}};
+  notesFor=k;loadNotes(k);
+  return h('div',{},list,h('div',{className:'nin'},ta,h('button',{textContent:'Send',onclick:send})))}
+async function loadNotes(k){
+  let n={};try{n=await api('/notes/'+k)||{}}catch{}
+  NOTES[k]=n;const list=$('#nl');if(!list||sel!==k)return;
+  const near=list.scrollHeight-list.scrollTop-list.clientHeight<40,es=Object.entries(n).sort((a,b)=>a[0]<b[0]?-1:1);
+  list.replaceChildren(...(es.length?es.map(([id,x])=>{const p=P[x.by];
+    return h('div',{className:'note'+(x.by===me.k?' mine':'')},av(p||{displayName:x.byName},26),
+      h('div',{className:'nb'},h('small',{},h('b',{textContent:p?.displayName||x.byName||x.by}),h('span',{textContent:x.t?new Date(x.t).toLocaleString():''}),
+        ...(x.by===me.k?[h('button',{className:'nx',textContent:'✕',title:'Delete my note',onclick:()=>{if(confirm('Delete this note?'))api(`/notes/${k}/${id}`,'DELETE').then(()=>loadNotes(k)).catch(e=>alert(e.message))}})]:[])),
+        h('div',{className:'nt',textContent:x.text})))}):[h('small',{className:'mu',textContent:'No notes yet. Leave one for the other mods.'})]));
+  if(near)list.scrollTop=list.scrollHeight}
+setInterval(()=>{if(sel&&notesFor===sel&&!document.hidden)loadNotes(sel)},5000);
+
 async function setStatus(st){
   const r=D[sel],k=sel,old=r.status,ai=r.aiv,v=old===st&&!ai?null:st;
   r.status=v;r.aiv=null;render();paintSide();
-  try{await api('/reports/'+k,'PATCH',{status:v,aiv:null});log(v||'cleared',r,k);if(v==='resolved'||v==='denied')schedDel(k);else cancelDel(k);render();if(sel===k)paintSide()}
+  try{await api('/reports/'+k,'PATCH',{status:v,aiv:null,...(v==='valid'?{validBy:me.k,validByName:P[me.k]?.displayName||me.k}:{})});log(v||'cleared',r,k);if(v==='resolved'||v==='denied')schedDel(k);else cancelDel(k);render();if(sel===k)paintSide()}
   catch(e){r.status=old;r.aiv=ai;render();paintSide();alert(e.message)}}
 async function doDelete(){
   const k=sel,r=D[k];cancelDel(k);
-  try{await api('/reports/'+k,'DELETE');delete D[k];api('/images/'+k,'DELETE').catch(()=>{});closeSide();log('deleted',r,k)}catch(e){alert(e.message)}}
+  try{await api('/reports/'+k,'DELETE');delete D[k];api('/images/'+k,'DELETE').catch(()=>{});api('/notes/'+k,'DELETE').catch(()=>{});closeSide();log('deleted',r,k)}catch(e){alert(e.message)}}
 
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch{}};
 async function sha(s){
@@ -562,6 +597,9 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['2.0','2026-10-09',['Notes chat on every report: leave notes for the other mods (updates every 5 seconds, delete your own)','Report/Arrest Case files show who validated each report, plus the report\u2019s notes']],
+  ['1.9.5','2026-10-09',['Download all of a player\u2019s valid reports from their page in A.F.R, as Zip or HTML']],
+  ['1.9.4','2026-10-09',['Download report now zooms into two choices: As Zip or As HTML']],
   ['1.9.3','2026-10-09',['Download report button under Delete: one report as a zip with its screenshot and Report/Arrest Case file','Exports leave out reports that have no screenshot','New wording at the bottom of the case file']],
   ['1.9.2','2026-10-09',['Renamed the case file to Report/Arrest Case']],
   ['1.9.1','2026-10-09',['ARREST CASE files now include the screenshot for each piece of evidence (click to enlarge) and flag reports with no screenshot','Added reasons for yam and jaboner (+3 Days each)']],
@@ -636,7 +674,7 @@ function schedDel(k){
   cancelDel(k);
   pend[k]={at:Date.now()+10000,id:setTimeout(async()=>{
     delete pend[k];
-    try{await api('/reports/'+k,'DELETE');api('/images/'+k,'DELETE').catch(()=>{});delete D[k];if(sel===k)closeSide();else render()}
+    try{await api('/reports/'+k,'DELETE');api('/images/'+k,'DELETE').catch(()=>{});api('/notes/'+k,'DELETE').catch(()=>{});delete D[k];if(sel===k)closeSide();else render()}
     catch(e){stat(e.message,1)}
   },10000)}}
 
@@ -692,7 +730,7 @@ h1{font-size:30px;letter-spacing:2px;margin:0;text-align:center}.sub{text-align:
 h2{font-size:19px;border-bottom:2px solid #111;padding-bottom:4px;margin-top:34px}h3{font-size:16px;margin:22px 0 6px}
 table{border-collapse:collapse;width:100%;margin:8px 0}th,td{border:1px solid #999;padding:6px 8px;text-align:left;vertical-align:top}th{background:#eee}
 td.n,th.n{text-align:right;white-space:nowrap}.tot td{font-weight:bold;background:#f6f6f6}.mono{font-family:Consolas,monospace}
-.ev{font-size:13px;color:#333}.im{width:240px}.im img{display:block;max-width:240px;border:1px solid #999;cursor:zoom-in}.im img.big{position:fixed;inset:0;margin:auto;max-width:95vw;max-height:95vh;z-index:9;cursor:zoom-out;box-shadow:0 0 0 100vmax #000c}.ev td{font-size:13px}.warn{color:#a00}.sig{margin-top:40px;color:#555;font-size:13px}
+.ev{font-size:13px;color:#333}.nts{margin-top:6px;padding:6px 8px;background:#f3f3f3;border-left:3px solid #999;font-size:12px}.nts div+div{margin-top:3px}.im{width:240px}.im img{display:block;max-width:240px;border:1px solid #999;cursor:zoom-in}.im img.big{position:fixed;inset:0;margin:auto;max-width:95vw;max-height:95vh;z-index:9;cursor:zoom-out;box-shadow:0 0 0 100vmax #000c}.ev td{font-size:13px}.warn{color:#a00}.sig{margin-top:40px;color:#555;font-size:13px}
 @media print{body{background:#fff;padding:0}.doc{border:0;box-shadow:none}}
 </style></head><body><div class="doc"><h1>${esc(title)}</h1><div class="sub">${sub}</div>${body}</div><script>document.addEventListener('click',e=>{const i=e.target.closest('.im img');document.querySelectorAll('.im img.big').forEach(x=>{if(x!==i)x.classList.remove('big')});if(i)i.classList.toggle('big')})<\/script></body></html>`}
 function playerSection(p,i){
@@ -702,12 +740,12 @@ function playerSection(p,i){
     if(!(key in idx)){idx[key]=ch.length;ch.push({reason:key,n:0,d:R?R[1]:0,h:R?R[2]:0,first:r.t,missing:!R})}
     const c=ch[idx[key]];c.n++;d+=c.d;hr+=c.h}
   const rows=ch.map((c,j)=>`<tr><td class="n">${j+1}</td><td${c.missing?' class="warn"':''}>${esc(c.reason)}${c.n>1?` <b>x${c.n}</b>`:''}</td><td class="n">${dur(c.d,c.h)}${c.n>1?` <b>x${c.n}</b> = ${dur(c.d*c.n,c.h*c.n)}`:''}</td><td>${esc(fmtT(c.first))}</td></tr>`).join('');
-  const ev=p.reports.map((r,j)=>`<tr><td class="n">${j+1}</td><td>${esc(fmtT(r.t))}</td><td>${esc(r.word)}</td><td>&ldquo;${esc(r.text)}&rdquo;</td><td class="im">${r.img?`<img src="${r.img}" alt="Screenshot of evidence ${j+1}" title="Click to enlarge">`:'<span class="warn">No image captured</span>'}</td></tr>`).join('');
+  const ev=p.reports.map((r,j)=>`<tr><td class="n">${j+1}</td><td>${esc(fmtT(r.t))}</td><td>${esc(r.word)}</td><td>&ldquo;${esc(r.text)}&rdquo;${r.notes?.length?`<div class="nts">${r.notes.map(n=>`<div><b>${esc(n.byName||n.by)}:</b> ${esc(n.text)}</div>`).join('')}</div>`:''}</td><td>${esc(r.vb||'Unknown')}</td><td class="im">${r.img?`<img src="${r.img}" alt="Screenshot of evidence ${j+1}" title="Click to enlarge">`:'<span class="warn">No image captured</span>'}</td></tr>`).join('');
   const noImg=p.reports.filter(r=>!r.img).length;
   return {d,hr,html:`<h2>Defendant ${i?'#'+i+': ':''}${esc(p.displayName)} (@${esc(p.username)})</h2>
-<table><tr><th>Display name</th><td>${esc(p.displayName)}</td></tr><tr><th>Username</th><td>@${esc(p.username)}</td></tr><tr><th>User ID</th><td class="mono">${esc(p.userId)}</td></tr><tr><th>Counts</th><td>${p.reports.length} valid report${p.reports.length>1?'s':''}</td></tr></table>
+<table><tr><th>Display name</th><td>${esc(p.displayName)}</td></tr><tr><th>Validated by</th><td>${esc([...new Set(p.reports.map(r=>r.vb||'Unknown'))].join(', '))}</td></tr><tr><th>Username</th><td>@${esc(p.username)}</td></tr><tr><th>User ID</th><td class="mono">${esc(p.userId)}</td></tr><tr><th>Counts</th><td>${p.reports.length} valid report${p.reports.length>1?'s':''}</td></tr></table>
 <h3>Charges (oldest first)</h3><table><tr><th class="n">#</th><th>Reason</th><th class="n">Time</th><th>First offence</th></tr>${rows}<tr class="tot"><td></td><td>Total time required</td><td class="n">${dur(d,hr)}</td><td></td></tr></table>
-<h3>Evidence</h3>${noImg?`<p class="warn">${noImg} of ${p.reports.length} report${p.reports.length>1?'s have':' has'} no screenshot.</p>`:''}<table class="ev"><tr><th class="n">#</th><th>Date</th><th>Word</th><th>Message</th><th>Image evidence</th></tr>${ev}</table>`}}
+<h3>Evidence</h3>${noImg?`<p class="warn">${noImg} of ${p.reports.length} report${p.reports.length>1?'s have':' has'} no screenshot.</p>`:''}<table class="ev"><tr><th class="n">#</th><th>Date</th><th>Word</th><th>Message &amp; notes</th><th>Validated by</th><th>Image evidence</th></tr>${ev}</table>`}}
 function buildCases(players){
   const now=new Date(),pad=n=>String(n).padStart(2,'0'),no=`MR-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`,by=esc(P[me.k]?.displayName||me.k);
   const all=players.flatMap(p=>p.reports),cnt={};for(const r of all)cnt[r.word||'?']=(cnt[r.word||'?']||0)+1;
@@ -724,13 +762,17 @@ ${secs.join('')}<div class="sig">Generated from the Mod Reports dashboard. All r
 // Builds the zip for a set of reports. Reports without a screenshot are left out.
 async function buildExport(entries){
   const te=new TextEncoder(),pad=n=>String(n).padStart(2,'0'),files=[],pl={};let skipped=0;
+  // Who validated each report: saved on the report, or the last Valid action in History
+  let hist={};try{hist=await api('/history')||{}}catch{}
+  const vby={};for(const id of Object.keys(hist).sort()){const e=hist[id];if(e.action==='valid'&&e.reportId)vby[e.reportId]=e.byName||e.by}
+  const whoValid=(k,r)=>r.validByName||vby[k]||(r.aiv||r.ai?.verdict==='yes'?'AI Assist (gpt-oss)':'Unknown');
   for(const[k,r]of entries){
     const im=await api('/images/'+k).catch(()=>null),m=typeof im==='string'&&im.match(/^data:image\/(\w+);base64,(.+)$/);
     if(!m){skipped++;continue}
     const t=new Date(pushTime(k)),day=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`,tm=`${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
     const dir=String(r.username||r.userId||'unknown').replace(/[^\w.-]/g,'_').replace(/^\.+/,'_'),base=`${dir}/${day}_${tm.replaceAll(':','-')}_${k}`;
-    const pk=String(r.userId??r.username);(pl[pk]??={displayName:r.displayName,username:r.username,userId:r.userId,dir,reports:[]}).reports.push({t:pushTime(k),word:r.word,text:r.text,img:im});
-    files.push({name:base+'.txt',data:te.encode(`[${day} ${tm}]\nDisplay Name: ${r.displayName}\nUsername: @${r.username}\nUser ID: ${r.userId}\nWord Detected: ${r.word??''}\nMessage: "${r.text}"\n`)});
+    const pk=String(r.userId??r.username);(pl[pk]??={displayName:r.displayName,username:r.username,userId:r.userId,dir,reports:[]}).reports.push({t:pushTime(k),word:r.word,text:r.text,img:im,vb:whoValid(k,r),notes:Object.values(await api('/notes/'+k).catch(()=>null)||{}).sort((a,b)=>(a.t||0)-(b.t||0))});
+    files.push({name:base+'.txt',data:te.encode(`[${day} ${tm}]\nDisplay Name: ${r.displayName}\nUsername: @${r.username}\nUser ID: ${r.userId}\nWord Detected: ${r.word??''}\nMessage: "${r.text}"\nValidated by: ${whoValid(k,r)}\n`)});
     files.push({name:`${base}.${m[1]==='jpeg'?'jpg':m[1]}`,data:Uint8Array.from(atob(m[2]),c=>c.charCodeAt(0))})
   }
   const players=Object.values(pl);
@@ -739,7 +781,7 @@ async function buildExport(entries){
   const cs=buildCases(players);
   files.unshift({name:'REPORT-ARREST CASE.html',data:te.encode(cs.main)});
   for(const c of cs.per)files.push({name:`${c.dir}/REPORT-ARREST CASE - ${c.dir}.html`,data:te.encode(c.html)});
-  return{blob:zip(files),skipped,count:entries.length-skipped}}
+  return{blob:zip(files),skipped,count:entries.length-skipped,cases:cs}}
 const saveBlob=(blob,name)=>h('a',{href:URL.createObjectURL(blob),download:name}).click();
 
 async function exportValid(){
@@ -754,15 +796,29 @@ async function exportValid(){
   }catch(e){alert(e.message)}
   b.disabled=false;render()}
 
-async function downloadReport(k,btn){
-  const r=D[k];if(!r)return;
-  btn.disabled=true;btn.textContent='Preparing...';
+// Download one report, or all of a player's valid reports
+async function downloadEntries(getEntries,base,btn,mode){
+  const entries=getEntries();
+  if(!entries.length)return alert('There are no valid reports for this player.');
+  const label=btn.textContent;btn.disabled=true;btn.textContent='Preparing...';
   try{
-    const x=await buildExport([[k,r]]);
-    if(!x.blob)alert('This report has no screenshot, so it can’t be downloaded.');
-    else saveBlob(x.blob,`report-${String(r.username||r.userId).replace(/[^\w.-]/g,'_')}-${k}.zip`)
+    const x=await buildExport(entries),name=base.replace(/[^\w.-]/g,'_');
+    if(!x.blob)alert(entries.length>1?'None of these reports have a screenshot, so there is nothing to download.':'This report has no screenshot, so it can’t be downloaded.');
+    else{
+      if(mode==='html')saveBlob(new Blob([x.cases.per[0].html],{type:'text/html'}),name+'.html');
+      else saveBlob(x.blob,name+'.zip');
+      if(x.skipped)alert(`Downloaded ${x.count} report${x.count>1?'s':''}. Left out ${x.skipped} without a screenshot.`)}
   }catch(e){alert(e.message)}
-  btn.disabled=false;btn.textContent='⬇ Download report'}
+  btn.disabled=false;btn.textContent=label}
+function dlPicker(getEntries,base,label){
+  const box=h('div',{className:'acts'});
+  const swap=(build)=>{box.classList.remove('zin');box.classList.add('zout');setTimeout(()=>{box.classList.remove('zout');box.replaceChildren(...build());void box.offsetWidth;box.classList.add('zin')},170)};
+  const main=()=>[h('button',{textContent:label,onclick:()=>swap(opts)})];
+  const opts=()=>[
+    h('button',{textContent:'🗜 As Zip',title:'Reports, screenshots and Report/Arrest Case file',onclick:e=>downloadEntries(getEntries,base,e.currentTarget,'zip')}),
+    h('button',{textContent:'📄 As HTML',title:'Just the Report/Arrest Case file, with the screenshots inside',onclick:e=>downloadEntries(getEntries,base,e.currentTarget,'html')}),
+    h('button',{textContent:'✕',title:'Back',style:'flex:0 0 auto',onclick:()=>swap(main)})];
+  box.replaceChildren(...main());return box}
 function pickPfp(f){
   if(!f)return;const im=new Image();
   im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=128;const m=Math.min(im.width,im.height);
