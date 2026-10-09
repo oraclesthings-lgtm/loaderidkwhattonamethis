@@ -350,13 +350,16 @@ function av(p,sz=40){
 async function loadStats(){lastStats=Date.now();try{HA=await api('/history')||{}}catch{}}
 function statsFor(k){
   // Each report counts once, for whoever handled it last. Reopening a report removes it from the stats.
-  const s={resolved:0,denied:0,valid:0,today:0,month:0,year:0,life:0},n=new Date(),cur={},U={resolved:new Set(),denied:new Set(),valid:new Set()};
+  const s={resolved:0,denied:0,valid:0,today:0,month:0,year:0,life:0},n=new Date(),cur={},vBy={},U={resolved:new Set(),denied:new Set(),valid:new Set()};
   for(const id of Object.keys(HA).sort()){
     const e=HA[id],rid=e.reportId||id;
-    if(e.action==='cleared')delete cur[rid];
-    else if(['resolved','denied','valid'].includes(e.action))cur[rid]=e}
-  for(const rid in cur){
-    const e=cur[rid];if(e.by!==k)continue;
+    if(e.action==='cleared'){delete cur[rid];delete vBy[rid]}
+    else if(['resolved','denied','valid'].includes(e.action)){cur[rid]=e;if(e.action==='valid')vBy[rid]=e}}
+  // Whoever validated a report keeps that credit when someone else resolves it later
+  const list=Object.keys(cur).map(rid=>cur[rid]);
+  for(const rid in cur)if(cur[rid].action==='resolved'&&vBy[rid]&&vBy[rid].by!==cur[rid].by)list.push(vBy[rid]);
+  for(const e of list){
+    if(e.by!==k)continue;
     s[e.action]++;s.life++;U[e.action].add(String(e.userId??e.username));const d=new Date(e.t);
     if(d.getFullYear()===n.getFullYear()){s.year++;if(d.getMonth()===n.getMonth()){s.month++;if(d.getDate()===n.getDate())s.today++}}}
   s.uResolved=U.resolved.size;s.uDenied=U.denied.size;s.uValid=U.valid.size;
@@ -507,6 +510,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['1.7.4','2026-10-09',['Whoever marked a report Valid keeps the Valid credit when someone else resolves it later']],
   ['1.7.3','2026-10-08',['Fixed: Resolve all valid now starts the 10 second countdown right away, with a live countdown and a Cancel button','Resolve all valid: one button in A.F.R marks every valid report as Resolved (counts in your stats, deleted after 10 seconds)']],
   ['1.7.2','2026-10-08',['New stats: Users resolved, Users denied and Users valid (how many different players, not reports)']],
   ['1.7.1','2026-10-07',['Launcher warns you when the worker doesn\u2019t pick up a launch request']],
