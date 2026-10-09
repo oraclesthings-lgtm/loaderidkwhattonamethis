@@ -372,7 +372,8 @@ function paintSide(){
     ...(r.ai?[h('div',{className:'f'},h('small',{textContent:'AI check'}),h('div',{className:'m',textContent:`${String(r.ai.verdict).toUpperCase()}: ${r.ai.reason||''}`}))]:[]),
     h('div',{className:'acts'},sb('resolved','ok','✅ Resolved','Resolved'),sb('denied','no','❌ Denied','Denied'),sb('valid',r.aiv?'va ai':'va','👍 Valid','Valid, can\u2019t act on it now')),
     h('small',{id:'dl',className:'mu',textContent:pend[sel]?dlText(sel):''}),
-    h('div',{className:'acts'},del,can));
+    h('div',{className:'acts'},del,can),
+    h('div',{className:'acts'},h('button',{textContent:'⬇ Download report',title:'Zip with the report, its screenshot and a Report/Arrest Case file',onclick:e=>downloadReport(sel,e.currentTarget)})));
   if(!src){const id=sel;
     api('/images/'+id).then(d=>{
       const b=$('#side .noimg');if(sel!==id||!b)return;
@@ -561,6 +562,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['1.9.3','2026-10-09',['Download report button under Delete: one report as a zip with its screenshot and Report/Arrest Case file','Exports leave out reports that have no screenshot','New wording at the bottom of the case file']],
   ['1.9.2','2026-10-09',['Renamed the case file to Report/Arrest Case']],
   ['1.9.1','2026-10-09',['ARREST CASE files now include the screenshot for each piece of evidence (click to enlarge) and flag reports with no screenshot','Added reasons for yam and jaboner (+3 Days each)']],
   ['1.9','2026-10-09',['Export valid now includes an ARREST CASE file: word violations (amount and %), each player\u2019s charges oldest first (repeats shown as x2, x3...), evidence and total time required','Each player folder also gets its own ARREST CASE file']],
@@ -715,32 +717,52 @@ function buildCases(players){
   const main=caseHTML('REPORT/ARREST CASE',`Case ${no} &middot; ${players.length} defendant${players.length>1?'s':''} &middot; prepared by ${by} on ${esc(now.toLocaleString())}`,
 `<h2>Word violations</h2><table><tr><th>Word</th><th class="n">Amount</th><th class="n">%</th></tr>${wr}<tr class="tot"><td>Total</td><td class="n">${all.length}</td><td class="n">100%</td></tr></table>
 <h2>Defendants</h2><table><tr><th class="n">#</th><th>Player</th><th>User ID</th><th class="n">Reports</th><th class="n">Time required</th></tr>${sum}</table>
-${secs.join('')}<div class="sig">Generated from the Mod Reports dashboard. All reports listed were marked Valid by a moderator.</div>`);
+${secs.join('')}<div class="sig">Generated from the Mod Reports dashboard. All reports listed were marked Valid by a trusted member and checked. If you think this is wrong, check the image evidence.</div>`);
   const per=players.map((p,i)=>({dir:p.dir,html:caseHTML(`REPORT/ARREST CASE`,`Case ${no}-${i+1} &middot; @${esc(p.username)} &middot; prepared by ${by} on ${esc(now.toLocaleString())}`,playerSection(p,0).html)}));
   return{main,per}}
+
+// Builds the zip for a set of reports. Reports without a screenshot are left out.
+async function buildExport(entries){
+  const te=new TextEncoder(),pad=n=>String(n).padStart(2,'0'),files=[],pl={};let skipped=0;
+  for(const[k,r]of entries){
+    const im=await api('/images/'+k).catch(()=>null),m=typeof im==='string'&&im.match(/^data:image\/(\w+);base64,(.+)$/);
+    if(!m){skipped++;continue}
+    const t=new Date(pushTime(k)),day=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`,tm=`${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+    const dir=String(r.username||r.userId||'unknown').replace(/[^\w.-]/g,'_').replace(/^\.+/,'_'),base=`${dir}/${day}_${tm.replaceAll(':','-')}_${k}`;
+    const pk=String(r.userId??r.username);(pl[pk]??={displayName:r.displayName,username:r.username,userId:r.userId,dir,reports:[]}).reports.push({t:pushTime(k),word:r.word,text:r.text,img:im});
+    files.push({name:base+'.txt',data:te.encode(`[${day} ${tm}]\nDisplay Name: ${r.displayName}\nUsername: @${r.username}\nUser ID: ${r.userId}\nWord Detected: ${r.word??''}\nMessage: "${r.text}"\n`)});
+    files.push({name:`${base}.${m[1]==='jpeg'?'jpg':m[1]}`,data:Uint8Array.from(atob(m[2]),c=>c.charCodeAt(0))})
+  }
+  const players=Object.values(pl);
+  if(!players.length)return{blob:null,skipped};
+  players.forEach(p=>p.reports.sort((a,b)=>a.t-b.t));players.sort((a,b)=>a.reports[0].t-b.reports[0].t);
+  const cs=buildCases(players);
+  files.unshift({name:'REPORT-ARREST CASE.html',data:te.encode(cs.main)});
+  for(const c of cs.per)files.push({name:`${c.dir}/REPORT-ARREST CASE - ${c.dir}.html`,data:te.encode(c.html)});
+  return{blob:zip(files),skipped,count:entries.length-skipped}}
+const saveBlob=(blob,name)=>h('a',{href:URL.createObjectURL(blob),download:name}).click();
 
 async function exportValid(){
   const vs=Object.entries(D).filter(([k,r])=>r.status==='valid');
   if(!vs.length)return alert('No valid reports to export yet.');
-  const b=$('#ex'),te=new TextEncoder(),pad=n=>String(n).padStart(2,'0'),files=[],pl={};
-  b.disabled=true;b.textContent='Exporting...';
+  const b=$('#ex');b.disabled=true;b.textContent='Exporting...';
   try{
-    for(const[k,r]of vs){
-      const t=new Date(pushTime(k)),day=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`,tm=`${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
-      const dir=String(r.username||r.userId||'unknown').replace(/[^\w.-]/g,'_').replace(/^\.+/,'_'),base=`${dir}/${day}_${tm.replaceAll(':','-')}_${k}`;
-      const pk=String(r.userId??r.username);const rec={t:pushTime(k),word:r.word,text:r.text,img:null};(pl[pk]??={displayName:r.displayName,username:r.username,userId:r.userId,dir,reports:[]}).reports.push(rec);
-      files.push({name:base+'.txt',data:te.encode(`[${day} ${tm}]\nDisplay Name: ${r.displayName}\nUsername: @${r.username}\nUser ID: ${r.userId}\nWord Detected: ${r.word??''}\nMessage: "${r.text}"\n`)});
-      const im=await api('/images/'+k).catch(()=>null),m=typeof im==='string'&&im.match(/^data:image\/(\w+);base64,(.+)$/);
-      if(m)rec.img=im;
-      if(m)files.push({name:`${base}.${m[1]==='jpeg'?'jpg':m[1]}`,data:Uint8Array.from(atob(m[2]),c=>c.charCodeAt(0))})
-    }
-    const players=Object.values(pl);players.forEach(p=>p.reports.sort((a,b)=>a.t-b.t));players.sort((a,b)=>a.reports[0].t-b.reports[0].t);
-    const cs=buildCases(players);
-    files.unshift({name:'REPORT-ARREST CASE.html',data:te.encode(cs.main)});
-    for(const c of cs.per)files.push({name:`${c.dir}/REPORT-ARREST CASE - ${c.dir}.html`,data:te.encode(c.html)});
-    h('a',{href:URL.createObjectURL(zip(files)),download:`valid-reports-${new Date().toISOString().slice(0,10)}.zip`}).click()
+    const x=await buildExport(vs);
+    if(!x.blob)alert('None of the valid reports have a screenshot, so there is nothing to export.');
+    else{saveBlob(x.blob,`valid-reports-${new Date().toISOString().slice(0,10)}.zip`);
+      if(x.skipped)alert(`Exported ${x.count} report${x.count>1?'s':''}. Left out ${x.skipped} without a screenshot.`)}
   }catch(e){alert(e.message)}
   b.disabled=false;render()}
+
+async function downloadReport(k,btn){
+  const r=D[k];if(!r)return;
+  btn.disabled=true;btn.textContent='Preparing...';
+  try{
+    const x=await buildExport([[k,r]]);
+    if(!x.blob)alert('This report has no screenshot, so it can’t be downloaded.');
+    else saveBlob(x.blob,`report-${String(r.username||r.userId).replace(/[^\w.-]/g,'_')}-${k}.zip`)
+  }catch(e){alert(e.message)}
+  btn.disabled=false;btn.textContent='⬇ Download report'}
 function pickPfp(f){
   if(!f)return;const im=new Image();
   im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=128;const m=Math.min(im.width,im.height);
