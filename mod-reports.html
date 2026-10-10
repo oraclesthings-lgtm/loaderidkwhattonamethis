@@ -110,6 +110,9 @@ body.open aside{transform:none}
 .tile.s-noted{background:linear-gradient(135deg,#8a5cf0,#3d2a73);border-color:#a884ff}
 .tile.s-open small,.tile.s-noted small,.tile.ut small{color:#ffffffcc}
 .tile.ut{border-color:#ffffff22;text-shadow:0 1px 2px #0008}
+.role{display:inline-block;margin-left:6px;padding:0 7px;border-radius:9px;font-size:11px;font-weight:600;vertical-align:2px}
+.role.cr{background:linear-gradient(135deg,#f0c040,#c6613f);color:#1a1205}
+.role.ad{background:linear-gradient(135deg,#3b55c9,#6b44c8);color:#fff}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px;flex:none}
 .mlg{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:12px;color:var(--mu);font-size:13px}
 .tile.s-ai{background:linear-gradient(135deg,#c99a14,#7a5a0c);border-color:#f0c040}
@@ -260,7 +263,7 @@ function paintNav(){
     ...NAV.map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':''),onclick:()=>go(id)},
       h('b',{textContent:t}),h('small',{textContent:s}),
       ...(id==='afr'&&open?[h('span',{className:'bd',textContent:open})]:[]))),
-    h('div',{className:'me'},av(P[me.k],34),h('b',{textContent:P[me.k]?.displayName||me.k}),h('button',{textContent:'Sign out',onclick:signout})))}
+    h('div',{className:'me'},av(P[me.k],34),h('b',{textContent:P[me.k]?.displayName||me.k},roleTag(me.k)),h('button',{textContent:'Sign out',onclick:signout})))}
 
 function render(){
   paintNav();
@@ -596,7 +599,7 @@ function renderLaunch(main){
     picker.append(pop)}
 
   const add=h('input',{placeholder:'Account username (as in RAM)',maxLength:20});
-  const addFn=()=>{const n=add.value.trim();if(!/^\w{3,20}$/.test(n))return alert('Usernames are 3 to 20 letters, numbers or _');
+  const addFn=()=>{if(!canManage())return alert('Only the Creator or an Administrator can add accounts.');const n=add.value.trim();if(!/^\w{3,20}$/.test(n))return alert('Usernames are 3 to 20 letters, numbers or _');
     api('/launcher/accounts/'+n.toLowerCase(),'PUT',n).then(()=>{accs[n.toLowerCase()]=n;LCH.accounts=accs;render()}).catch(e=>alert(e.message))};
   add.onkeydown=e=>{if(e.key==='Enter')addFn()};
   const send=async(b,list)=>{b.disabled=true;let key;
@@ -616,14 +619,14 @@ function renderLaunch(main){
       h('small',{className:'mu',textContent:'Relaunches any bot account that disconnects or stops checking in for 2 minutes.'}),
       picker),
     h('h2',{className:'sec',textContent:'Accounts'}),
-    h('div',{className:'addr'},add,h('button',{textContent:'Add',onclick:addFn})),
+    canManage()?h('div',{className:'addr'},add,h('button',{textContent:'Add',onclick:addFn})):h('p',{className:'mu',textContent:'Only the Creator or an Administrator can add or remove accounts.'}),
     names.length?h('div',{className:'addr'},multi,all):'',
     names.length?h('div',{className:'list'+(lAnim?' zin':'')},...names.map(n=>{const isBot=!!bots[n.toLowerCase()],[bs,bc]=botStatus(n),hasHb=!!BOT[n.toLowerCase()];
       return h('div',{className:'row acc'+(isBot?' a-ai':'')},
         h('input',{type:'checkbox',checked:lSel.has(n),onchange:e=>{e.target.checked?lSel.add(n):lSel.delete(n);render()}}),
         h('div',{className:'rb'},h('b',{textContent:n+(isBot?' (bot)':'')}),...(isBot||hasHb?[h('small',{className:bc,style:'display:block',textContent:bs})]:[])),
         launchBtn(n),
-        h('button',{textContent:'✕',title:'Remove from this list',onclick:()=>{if(confirm(`Remove ${n} from the list?`))api('/launcher/accounts/'+n.toLowerCase(),'DELETE').then(()=>{delete accs[n.toLowerCase()];render()}).catch(e=>alert(e.message))}}))}))
+        ...(canManage()?[h('button',{textContent:'✕',title:'Remove from this list',onclick:()=>{if(confirm(`Remove ${n} from the list?`))api('/launcher/accounts/'+n.toLowerCase(),'DELETE').then(()=>{delete accs[n.toLowerCase()];render()}).catch(e=>alert(e.message))}})]:[]))}))
       :h('p',{className:'mu',textContent:'No accounts yet. Add the usernames from Roblox Account Manager.'}),
     h('h2',{className:'sec',textContent:'Recent launches'}),
     lg.length?h('div',{className:'list'},...lg.map(([k,e])=>h('div',{className:'row a-'+(e.ok?'resolved':'denied')},
@@ -633,6 +636,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['2.3','2026-10-10',['Roles: IsCreator and IsAdministratorLvl, set only in the Firebase console','Only the Creator or an Administrator can add or remove Launcher accounts','Creator and Admin tags next to names']],
   ['2.2','2026-10-10',['A.F.R player tiles are coloured by their reports: each colour takes up as much of the tile as its share (valid, AI valid, noted, unchecked...)','New colours: Unchecked and Noted (reports with notes)','Filter: colour dots on Is marked, plus a new Noted filter']],
   ['2.1','2026-10-09',['Attach pictures to notes: \ud83d\udcce button, paste or drag and drop','Note pictures show up in the Report/Arrest Case files']],
   ['2.0','2026-10-09',['Notes chat on every report: leave notes for the other mods (updates every 5 seconds, delete your own)','Report/Arrest Case files show who validated each report, plus the report\u2019s notes']],
@@ -664,10 +668,13 @@ function renderLog(main){
     h('div',{className:'hd'},h('b',{textContent:'v'+v}),h('small',{className:'mu',textContent:d})),
     h('ul',{className:'cl'},...items.map(t=>h('li',{textContent:t}))),...(/1/.test(v)&&/7/.test(v)?[h('div',{className:'wd',title:'W.D. GASTER WAS HERE',textContent:'W.D. GASTER WAS HERE'})]:[])))))}
 
+// Roles are set by hand in the Firebase console only (profiles/<username>/IsCreator, IsAdministratorLvl)
+const isCreator=k=>P[k]?.IsCreator===true,isAdmin=k=>P[k]?.IsAdministratorLvl===true,canManage=()=>isCreator(me.k)||isAdmin(me.k);
+const roleTag=k=>isCreator(k)?h('span',{className:'role cr',textContent:'Creator'}):isAdmin(k)?h('span',{className:'role ad',textContent:'Admin'}):'';
 function renderAll(main){
   const ps=Object.entries(P);
   main.append(ps.length?h('div',{className:'grid',style:'grid-template-columns:repeat(auto-fill,minmax(330px,1fr))'},...ps.map(([k,p])=>
-    h('div',{className:'pc'},h('div',{className:'hd'},av(p,44),h('div',{},h('b',{textContent:p.displayName}),h('small',{className:'mu',textContent:'@'+p.username}))),
+    h('div',{className:'pc'},h('div',{className:'hd'},av(p,44),h('div',{},h('b',{textContent:p.displayName},roleTag(k)),h('small',{className:'mu',textContent:'@'+p.username}))),
       tiles(statsFor(k),p.hidden&&k!==me.k,'mini')))):h('p',{className:'mu',textContent:'No profiles yet.'}))}
 
 function renderProf(main){
