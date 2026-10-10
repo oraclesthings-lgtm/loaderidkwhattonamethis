@@ -183,6 +183,28 @@ select{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding
 @keyframes zout{to{opacity:0;transform:scale(1.35)}}
 @media(prefers-reduced-motion:reduce){.zin,.zout{animation:none}}
 .pset input:not([type=checkbox]){width:100%}
+.bcs{display:grid;gap:8px;max-width:760px;margin:0 auto 22px;text-align:center}
+.bc{padding:12px 16px;border-radius:8px;border:1px solid #6f8cff66;background:linear-gradient(135deg,#1f2a5c,#141a33)}
+.bc.warn{border-color:#f0c04088;background:linear-gradient(135deg,#4a3a0e,#1e1a10)}
+.bc.imp{border-color:#e25b5b88;background:linear-gradient(135deg,#5a1f24,#1e1214)}
+.bcl{font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#ffffffb0;margin-bottom:4px}
+.bc .bt{white-space:pre-wrap;word-break:break-word;font-size:16px}
+.bc small{display:block;color:var(--mu);font-size:12px;margin-top:4px}
+.bcta{width:100%;resize:vertical;background:#0e1420;border:1px solid var(--line);border-radius:6px;padding:9px 11px;color:inherit;font:inherit}
+.mrow{display:grid;gap:10px}
+.mh{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mh .rb{min-width:160px}
+.mact{display:flex;gap:6px;flex-wrap:wrap}
+.mact button.on{border-color:var(--ac);background:#25306a}
+.mform{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.mform input{flex:1;min-width:180px}
+.tag{display:inline-block;margin-left:6px;padding:0 7px;border-radius:9px;font-size:11px;font-weight:600;vertical-align:2px}
+.tag.ban{background:#c23b3b;color:#fff}
+.tag.wn{background:#c99a14;color:#1a1205}
+#wm{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#000c;padding:16px}
+#wm .box{max-width:440px;width:100%;padding:20px;border-radius:10px;border:1px solid #f0c04088;background:linear-gradient(160deg,#3a2e0c,#121826 60%);display:grid;gap:10px}
+#wm h2{margin:0}
+#wm button{background:linear-gradient(135deg,#c99a14,#7a5a0c);border-color:#f0c040}
 @media(max-width:760px){.me{display:none}}
 @media(max-width:760px){
   #nav{position:static;width:auto;flex-direction:row;overflow-x:auto;padding:8px}
@@ -230,10 +252,12 @@ const DB=window.__CFG?.db;
 if(!DB){document.body.textContent='Open the dashboard through mod-reports-loader.html.';throw new Error('no config')}
 const $=s=>document.querySelector(s);
 const h=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);e.append(...k);return e};
-let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={};
+let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={},B={},W={},ML={},modErr='',modOpen=null;
 
-const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',all:'All profiles',prof:'Profile settings',log:'Changelogs'};
-const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['log','Changelogs','What changed']];
+const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation'};
+const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed']];
+// Tabs only the Creator and Administrators can see or open
+const STAFF=new Set(['bc','mod']);
 const ACT={resolved:['✅','Resolved'],denied:['❌','Denied'],valid:['👍','Marked valid'],cleared:['↩️','Reopened'],deleted:['🗑','Deleted']};
 
 async function api(path,method='GET',body,qs){
@@ -256,28 +280,29 @@ function groups(ff){
   return Object.entries(m).map(([id,list])=>{list.sort((a,b)=>a.k<b.k?1:-1);return{id,list,name:list[0].displayName,user:list[0].username}})
     .sort((a,b)=>a.list[0].k<b.list[0].k?1:-1)}
 
-function go(v){view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(st)loadStats().then(render);if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
+function go(v){view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(st)loadStats().then(render);if(v==='mod')loadMod().then(render);if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
 function paintNav(){
   const open=Object.values(D).filter(r=>!r.status).length;
   $('#nav').replaceChildren(h('div',{className:'brand',textContent:'Mod Reports'}),
-    ...NAV.map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':''),onclick:()=>go(id)},
+    ...NAV.filter(([id])=>!STAFF.has(id)||canManage()).map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':''),onclick:()=>go(id)},
       h('b',{textContent:t}),h('small',{textContent:s}),
       ...(id==='afr'&&open?[h('span',{className:'bd',textContent:open})]:[]))),
     h('div',{className:'me'},av(P[me.k],34),h('b',{textContent:P[me.k]?.displayName||me.k},roleTag(me.k)),h('button',{textContent:'Sign out',onclick:signout})))}
 
 function render(){
+  if(STAFF.has(view)&&!canManage())view='home';
   paintNav();
   const main=$('#main');main.replaceChildren();
   $('#title').textContent=TITLE[view];
   $('#back').hidden=!(view==='afr'&&user);
   $('#q').hidden=!(view==='afr'&&!user);
   $('#ex').hidden=view!=='afr';{const n=Object.values(D).filter(r=>r.status==='valid').length;$('#rv').hidden=view!=='afr';$('#rv').disabled=!n;$('#rv').textContent=`✅ Resolve all valid (${n})`}$('#fw').hidden=view!=='afr';$('#ex').textContent=`Export valid (${Object.values(D).filter(r=>r.status==='valid').length})`;
-  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog}[view])(main)}
+  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod}[view])(main)}
 
 function renderHome(main){
   const rs=Object.values(D),n=s=>rs.filter(r=>r.status===s&&!r.aiv).length;
   const S=[['Open',rs.filter(r=>!r.status).length,'o'],['Resolved',n('resolved'),'g'],['Denied',n('denied'),'r'],['Valid, can\u2019t act yet',n('valid'),'v'],['AI valid',rs.filter(r=>r.aiv).length,'y'],['Total reports',rs.length,''],['Users flagged',groups().length,'']];
-  main.append(
+  main.append(bcBanners(),
     h('h2',{textContent:'Your stats'}),tiles(statsFor(me.k)),h('h2',{className:'sec',textContent:'Reports overview'}),h('div',{className:'grid stats'},...S.map(([l,v,c])=>h('div',{className:'stat '+c},h('div',{className:'n',textContent:v}),h('small',{textContent:l})))),
     h('h2',{className:'sec',textContent:'Flagged words'}),pieChart(),
     h('h2',{className:'sec',textContent:'Recent activity'}),histList(6))}
@@ -636,6 +661,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['2.4','2026-10-10',['Broadcast tab (Creator and Administrators only): post messages that show at the top of everyone\u2019s Main menu','Moderation tab (Creator and Administrators only): warn, kick, ban (1 hour to permanent), unban and clear warnings','Warnings pop up for the player and must be acknowledged; kicks and bans sign them out within seconds','Administrators can\u2019t act on the Creator','Moderation log of every action']],
   ['2.3','2026-10-10',['Roles: IsCreator and IsAdministratorLvl, set only in the Firebase console','Only the Creator or an Administrator can add or remove Launcher accounts','Creator and Admin tags next to names']],
   ['2.2','2026-10-10',['A.F.R player tiles are coloured by their reports: each colour takes up as much of the tile as its share (valid, AI valid, noted, unchecked...)','New colours: Unchecked and Noted (reports with notes)','Filter: colour dots on Is marked, plus a new Noted filter']],
   ['2.1','2026-10-09',['Attach pictures to notes: \ud83d\udcce button, paste or drag and drop','Note pictures show up in the Report/Arrest Case files']],
@@ -671,6 +697,117 @@ function renderLog(main){
 // Roles are set by hand in the Firebase console only (profiles/<username>/IsCreator, IsAdministratorLvl)
 const isCreator=k=>P[k]?.IsCreator===true,isAdmin=k=>P[k]?.IsAdministratorLvl===true,canManage=()=>isCreator(me.k)||isAdmin(me.k);
 const roleTag=k=>isCreator(k)?h('span',{className:'role cr',textContent:'Creator'}):isAdmin(k)?h('span',{className:'role ad',textContent:'Admin'}):'';
+// ---------- Broadcasts ----------
+const BCL={info:['📢','Announcement',''],warn:['⚠️','Warning','warn'],imp:['🚨','Important','imp']};
+const bcList=()=>Object.entries(B).filter(([,b])=>b&&b.text).sort((a,b)=>a[0]<b[0]?1:-1);
+// Admins can remove any broadcast except the Creator's; the Creator can remove any
+const canDelBc=b=>canManage()&&(b.by===me.k||isCreator(me.k)||!isCreator(b.by));
+function bcCard(k,b,manage){
+  const[ic,l,c]=BCL[b.level]||BCL.info;
+  return h('div',{className:'bc '+c},h('div',{className:'bcl',textContent:ic+' '+l}),h('div',{className:'bt',textContent:b.text}),
+    h('small',{textContent:(b.byName||b.by)+(b.t?' · '+new Date(b.t).toLocaleString():'')}),
+    ...(manage&&canDelBc(b)?[h('button',{textContent:'🗑 Remove',style:'margin-top:8px',onclick:()=>{if(confirm('Remove this broadcast?'))api('/broadcasts/'+k,'DELETE').then(()=>{delete B[k];render()}).catch(e=>alert(e.message))}})]:[]))}
+function bcBanners(){const l=bcList().slice(0,3);return l.length?h('div',{className:'bcs'},...l.map(([k,b])=>bcCard(k,b))):''}
+function renderBc(main){
+  const ta=h('textarea',{className:'bcta',placeholder:'Message for everyone...',maxLength:500,rows:4});
+  const lv=h('select',{},...Object.entries(BCL).map(([v,[ic,l]])=>h('option',{value:v,textContent:ic+' '+l})));
+  const btn=h('button',{textContent:'📢 Send broadcast'});
+  btn.onclick=async()=>{const t=ta.value.trim();if(!t)return alert('Write a message first.');btn.disabled=true;
+    try{await api('/broadcasts','POST',{text:t,level:lv.value,by:me.k,byName:P[me.k]?.displayName||me.k,t:{'.sv':'timestamp'}});B=await api('/broadcasts')||{};render()}
+    catch(e){alert(e.message);btn.disabled=false}};
+  const l=bcList();
+  main.append(h('div',{className:'pc pset',style:'max-width:560px'},h('b',{textContent:'New broadcast'}),
+      h('small',{className:'mu',textContent:'Shows at the top of everyone’s Main menu. The newest 3 are shown there.'}),ta,lv,btn),
+    h('h2',{className:'sec',textContent:`Live broadcasts (${l.length})`}),
+    l.length?h('div',{className:'list',style:'max-width:760px'},...l.map(([k,b])=>bcCard(k,b,true))):h('p',{className:'mu',textContent:'No broadcasts yet.'}))}
+
+// ---------- Moderation: warn, kick, ban ----------
+// Nobody can act on themselves, and Administrators can't act on the Creator
+const canAct=k=>canManage()&&k!==me.k&&!isCreator(k);
+const banOn=b=>!!b&&(!b.until||b.until>Date.now());
+const banUntil=b=>b.until?'until '+new Date(b.until).toLocaleString():'permanently';
+const banMsg=b=>`You are banned ${banUntil(b)}${b.byName?' by '+b.byName:''}.${b.reason?' Reason: '+b.reason:''}`;
+const kickMsg=x=>`You were kicked${x?.byName?' by '+x.byName:''}.${x?.reason?' Reason: '+x.reason:''}`;
+const BANS=[[36e5,'1 hour'],[864e5,'1 day'],[2592e5,'3 days'],[6048e5,'7 days'],[2592e6,'30 days'],[0,'Permanent']];
+const MLA={warn:['⚠️','Warned'],kick:['👢','Kicked'],ban:['⛔','Banned'],unban:['✅','Unbanned'],clearw:['🧹','Cleared warnings of']};
+async function loadMod(){
+  try{const[w,l]=await Promise.all([api('/warns'),api('/modlog','GET',undefined,'orderBy=%22%24key%22&limitToLast=30')]);W=w||{};ML=l||{};modErr=''}
+  catch(e){modErr=e.message}}
+async function modAct(k,act,reason,dur){
+  const p=P[k];if(!p||!canAct(k))return alert('You can’t do that to this profile.');
+  const by={by:me.k,byName:P[me.k]?.displayName||me.k},ts={'.sv':'timestamp'},until=act==='ban'&&dur?Date.now()+dur:null;
+  try{
+    if(act==='warn')await api('/warns/'+k,'POST',{text:reason,...by,t:ts,ack:false});
+    else if(act==='kick')await api('/profiles/'+k,'PATCH',{kickN:(p.kickN||0)+1,kick:{reason:reason||null,...by,t:ts}});
+    else if(act==='ban')await api('/profiles/'+k,'PATCH',{ban:{reason:reason||null,...by,until,t:ts},kickN:(p.kickN||0)+1});
+    else if(act==='unban')await api('/profiles/'+k+'/ban','DELETE');
+    else if(act==='clearw')await api('/warns/'+k,'DELETE');
+    await api('/modlog','POST',{action:act,target:k,targetName:p.displayName||k,reason:reason||null,until,...by,t:ts}).catch(()=>{});
+    modOpen=null;try{P=await api('/profiles')||P}catch{}await loadMod();render()
+  }catch(e){alert(e.message)}}
+function modRow(k,p){
+  const ws=Object.values(W[k]||{}),ban=banOn(p.ban)?p.ban:null,nm=p.displayName||k;
+  const head=h('div',{className:'mh'},av(p,40),h('div',{className:'rb'},
+    h('b',{textContent:nm},roleTag(k),...(ban?[h('span',{className:'tag ban',textContent:'Banned '+banUntil(ban)})]:[]),
+      ...(ws.length?[h('span',{className:'tag wn',textContent:`${ws.length} warning${ws.length>1?'s':''}`})]:[])),
+    h('small',{className:'mu',textContent:'@'+(p.username||k)})));
+  const box=h('div',{className:'pc mrow'},head);
+  if(!canAct(k)){head.append(h('small',{className:'mu',textContent:k===me.k?'You':'Protected (Creator)'}));return box}
+  const open=a=>modOpen?.k===k&&modOpen.a===a;
+  const btn=(a,t)=>h('button',{className:open(a)?'on':'',textContent:t,onclick:()=>{modOpen=open(a)?null:{k,a,fresh:true};render()}});
+  head.append(h('div',{className:'mact'},btn('warn','⚠ Warn'),btn('kick','👢 Kick'),
+    ban?h('button',{textContent:'✅ Unban',onclick:()=>{if(confirm(`Unban ${nm}?`))modAct(k,'unban')}}):btn('ban','⛔ Ban'),
+    ...(ws.length?[h('button',{textContent:'🧹 Clear warnings',onclick:()=>{if(confirm(`Clear all ${ws.length} warning${ws.length>1?'s':''} for ${nm}?`))modAct(k,'clearw')}})]:[])));
+  if(modOpen?.k===k){
+    const a=modOpen.a,rs=h('input',{placeholder:a==='warn'?'Warning message (they have to read it)':'Reason (optional)',maxLength:300});
+    const dur=a==='ban'?h('select',{},...BANS.map(([v,l])=>h('option',{value:v,textContent:l}))):'';
+    const ok=h('button',{className:'del',textContent:{warn:'Send warning',kick:'Kick now',ban:'Ban'}[a]});
+    ok.onclick=()=>{const r=rs.value.trim();if(a==='warn'&&!r)return alert('Write the warning first.');ok.disabled=true;modAct(k,a,r,dur?+dur.value:0)};
+    rs.onkeydown=e=>{if(e.key==='Enter')ok.click()};
+    box.append(h('div',{className:'mform'},rs,dur,ok,h('button',{textContent:'Cancel',onclick:()=>{modOpen=null;render()}})));
+    if(modOpen.fresh){modOpen.fresh=false;setTimeout(()=>rs.focus())}}
+  return box}
+function modLog(){
+  if(modErr)return h('p',{className:'bad',textContent:modErr+'. Add the /warns and /modlog rules in Firebase.'});
+  const es=Object.entries(ML).sort((a,b)=>a[0]<b[0]?1:-1);
+  if(!es.length)return h('p',{className:'mu',textContent:'No moderation actions yet.'});
+  const cls={ban:'denied',warn:'ai',kick:'cleared',unban:'resolved',clearw:'valid'};
+  return h('div',{className:'list'},...es.map(([,e])=>{const[ic,l]=MLA[e.action]||['•',String(e.action)];
+    return h('div',{className:'row a-'+(cls[e.action]||'')},h('span',{className:'ic',textContent:ic}),
+      h('div',{className:'rb'},h('b',{textContent:`${l} ${e.targetName||e.target} by ${e.byName||e.by}`+(e.action==='ban'?' '+banUntil(e):'')}),
+        ...(e.reason?[h('div',{className:'msg',textContent:e.reason})]:[])),
+      h('small',{className:'tm',textContent:e.t?new Date(e.t).toLocaleString():''}))}))}
+function renderMod(main){
+  const ps=Object.entries(P).sort((a,b)=>(a[1].displayName||a[0]).localeCompare(b[1].displayName||b[0]));
+  main.append(h('p',{className:'mu',style:'margin-top:0',textContent:'Warn, kick or ban profiles. A ban also kicks them right away. Administrators can’t act on the Creator.'}),
+    h('div',{className:'list'},...ps.map(([k,p])=>modRow(k,p))),
+    h('h2',{className:'sec',textContent:'Moderation log'}),modLog())}
+
+// Checks the signed-in profile: kicked or banned users get signed out
+function guard(rec){
+  if(!me)return true;
+  if(!rec){kickOut('Your profile no longer exists.');return true}
+  if(banOn(rec.ban)){kickOut(banMsg(rec.ban));return true}
+  if((rec.kickN||0)>(me.kn||0)){kickOut(kickMsg(rec.kick));return true}
+  return false}
+function kickOut(msg){me=null;ls('me',null);ls('kickmsg',msg);location.reload()}
+// Unread warnings pop up and must be acknowledged
+async function checkWarns(){
+  if(!me||$('#wm'))return;
+  let w={};try{w=await api('/warns/'+me.k)||{}}catch{return}
+  const e=Object.entries(w).filter(([,x])=>x&&!x.ack).sort((a,b)=>a[0]<b[0]?-1:1)[0];
+  if(!e||$('#wm')||!me)return;
+  const[id,x]=e,ok=h('button',{textContent:'I understand'});
+  const box=h('div',{id:'wm'},h('div',{className:'box zin',role:'alertdialog'},h('h2',{textContent:'⚠ You have been warned'}),
+    h('div',{className:'m',textContent:x.text||''}),h('small',{className:'mu',textContent:`From ${x.byName||x.by}${x.t?' · '+new Date(x.t).toLocaleString():''}`}),ok));
+  ok.onclick=async()=>{ok.disabled=true;
+    try{await api(`/warns/${me.k}/${id}`,'PATCH',{ack:true,ackAt:{'.sv':'timestamp'}})}catch(err){alert(err.message);ok.disabled=false;return}
+    box.remove();checkWarns()};
+  document.body.append(box);ok.focus()}
+setInterval(async()=>{if(!me||document.hidden)return;
+  try{const r=await api('/profiles/'+me.k);if(guard(r))return;P[me.k]=r}catch{}
+  checkWarns()},5000);
+
 function renderAll(main){
   const ps=Object.entries(P);
   main.append(ps.length?h('div',{className:'grid',style:'grid-template-columns:repeat(auto-fill,minmax(330px,1fr))'},...ps.map(([k,p])=>
@@ -695,7 +832,7 @@ function renderProf(main){
       const old=await sha(me.k+':'+cur.value);
       if(old!==p.pass)return say('Current password is wrong.');
       const nh=await sha(me.k+':'+nw.value);
-      if(await patchMe({pass:nh,prev:old})){ls('me',JSON.stringify({k:me.k,h:nh}));alert('Password changed.')}}}),
+      if(await patchMe({pass:nh,prev:old})){ls('me',JSON.stringify({k:me.k,h:nh,kn:me.kn}));alert('Password changed.')}}}),
     msg,
     h('button',{textContent:'Sign out',onclick:signout})))}
 
@@ -875,6 +1012,10 @@ async function load(){
   if(!me)return;
   try{D=await api('/reports')||{};stat('Live')}catch(e){stat(e.message,1);return}
   try{P=await api('/profiles')||{}}catch{}
+  if(guard(P[me.k]))return;
+  try{B=await api('/broadcasts')||{}}catch{}
+  if(view==='mod')await loadMod();
+  checkWarns();
   try{SET=await api('/settings')||{}}catch{}
   try{NOTED=new Set(Object.keys(await api('/notes','GET',undefined,'shallow=true')||{}))}catch{}
   await loadHist();
@@ -899,9 +1040,13 @@ function paintCd(){
 let mode='in';
 const err=t=>{$('#err').textContent=t};
 function setMode(m){mode=m;$('#dn').hidden=m==='in';$('#go').textContent=m==='in'?'Sign in':'Create profile';$('#mk').textContent=m==='in'?'Create profile':'Back to sign in';err('')}
-function enter(k,rec){me={k};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load()}
+function enter(k,rec,kn){
+  if(banOn(rec.ban)){ls('me',null);showLogin();return err(banMsg(rec.ban))}
+  kn??=rec.kickN||0;
+  if((rec.kickN||0)>kn){ls('me',null);showLogin();return err(kickMsg(rec.kick)+' Sign in again.')}
+  me={k,kn};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass,kn}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load()}
 function signout(){ls('me',null);location.reload()}
-function showLogin(){$('#login').hidden=false}
+function showLogin(){$('#login').hidden=false;const m=ls('kickmsg');if(m){ls('kickmsg',null);err(m)}}
 $('#mk').onclick=()=>setMode(mode==='in'?'new':'in');
 $('#login').onsubmit=async ev=>{
   ev.preventDefault();err('');
@@ -921,7 +1066,7 @@ $('#login').onsubmit=async ev=>{
     }
   }catch(e){err(e.message)}};
 let sess=null;try{sess=JSON.parse(ls('me'))}catch{}
-if(sess&&/^\w+$/.test(sess.k))api('/profiles/'+sess.k).then(r=>r&&r.pass===sess.h?enter(sess.k,r):showLogin()).catch(showLogin);else showLogin();
+if(sess&&/^\w+$/.test(sess.k))api('/profiles/'+sess.k).then(r=>r&&r.pass===sess.h?enter(sess.k,r,sess.kn):showLogin()).catch(showLogin);else showLogin();
 </script>
 </body>
 </html>
