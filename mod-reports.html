@@ -106,6 +106,12 @@ body.open aside{transform:none}
 #dl{display:block;margin-top:10px}
 .tl{display:flex;gap:10px;align-items:center}
 .tb{min-width:0;flex:1}
+.tile.s-open{background:linear-gradient(135deg,#3d4b6e,#1a2236);border-color:#55648a}
+.tile.s-noted{background:linear-gradient(135deg,#8a5cf0,#3d2a73);border-color:#a884ff}
+.tile.s-open small,.tile.s-noted small,.tile.ut small{color:#ffffffcc}
+.tile.ut{border-color:#ffffff22;text-shadow:0 1px 2px #0008}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px;flex:none}
+.mlg{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:12px;color:var(--mu);font-size:13px}
 .tile.s-ai{background:linear-gradient(135deg,#c99a14,#7a5a0c);border-color:#f0c040}
 .tile.s-ai small{color:#ffffffc4}
 .sb.on.ai{background:linear-gradient(135deg,#c99a14,#7a5a0c);border-color:#f0c040}
@@ -243,7 +249,7 @@ async function log(action,r,k){
 
 function groups(ff){
   const m={};
-  for(const k in D){const r=D[k];if(ff&&!matches(r))continue;const id=String(r.userId??r.username);(m[id]??=[]).push({...r,k})}
+  for(const k in D){const r=D[k];if(ff&&!matches({...r,k}))continue;const id=String(r.userId??r.username);(m[id]??=[]).push({...r,k})}
   return Object.entries(m).map(([id,list])=>{list.sort((a,b)=>a.k<b.k?1:-1);return{id,list,name:list[0].displayName,user:list[0].username}})
     .sort((a,b)=>a.list[0].k<b.list[0].k?1:-1)}
 
@@ -325,16 +331,18 @@ function renderAfr(main){
   loadHeads(gs.map(g=>g.id));
   if(!user){
     const f=gs.filter(g=>[g.name,g.user,g.id].join(' ').toLowerCase().includes(q));
-    main.append(f.length?h('div',{className:'grid'},...f.map(g=>h('button',{className:'tile',onclick:()=>{user=g.id;render()}},
+    const legend=h('div',{className:'mlg'},...MARKS.map(([m,l])=>h('span',{},dot(m),l)));
+    main.append(f.length?h('div',{},legend,h('div',{className:'grid'},...f.map(g=>{const G=userGrad(g.list);
+      return h('button',{className:'tile ut',style:`background:${G.bg}`,title:G.parts.map(([m,x])=>`${MARKS.find(z=>z[0]===m)[1]}: ${G.c[m]} (${Math.round(x*100)}%)`).join('\n'),onclick:()=>{user=g.id;render()}},
       h('div',{className:'tl'},head(g.id,44,g.name||g.user),h('div',{className:'tb'},h('b',{textContent:g.name||g.user}),h('small',{textContent:'@'+g.user}),
-      h('small',{textContent:`${g.list.length} report${g.list.length>1?'s':''}, ${g.list.filter(r=>!r.status).length} open`}))))))
+      h('small',{textContent:`${g.list.length} report${g.list.length>1?'s':''}: `+G.parts.map(([m])=>`${G.c[m]} ${MARKS.find(z=>z[0]===m)[1].toLowerCase()}`).join(', ')}))))})))
       :h('p',{className:'mu',textContent:Object.keys(D).length?'No user matches that search.':'No reports yet. New ones show up here after the scanner uploads them.'}));
   }else{
     const g=gs.find(x=>x.id===user);if(!g){user=null;return render()}
     const nv=g.list.filter(r=>r.status==='valid').length,gid=g.id;
     main.append(h('div',{className:'tl',style:'margin-bottom:14px;flex-wrap:wrap'},head(g.id,48,g.name||g.user),h('h2',{style:'margin:0;flex:1',textContent:`${g.name||g.user} (@${g.user})`}),
       nv?h('div',{style:'min-width:300px'},dlPicker(()=>Object.entries(D).filter(([k,r])=>r.status==='valid'&&String(r.userId??r.username)===gid),`valid-reports-${g.user||g.id}`,`⬇ Download all valid (${nv})`)):''),h('div',{className:'grid'},...g.list.map(r=>
-      h('button',{className:`tile s-${r.aiv?'ai':(r.status||'none')}${r.k===sel?' sel':''}`,onclick:()=>openSide(r.k)},
+      h('button',{className:`tile s-${markOf(r)}${r.k===sel?' sel':''}`,onclick:()=>openSide(r.k)},
         h('small',{textContent:(r.word?`Flagged: ${r.word}`:'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),h('div',{className:'msg',textContent:r.text})))));
   }}
 
@@ -424,7 +432,7 @@ function notesBox(k){
   notesFor=k;loadNotes(k);return wrap}
 async function loadNotes(k){
   let n={};try{n=await api('/notes/'+k)||{}}catch{}
-  NOTES[k]=n;const list=$('#nl');if(!list||sel!==k)return;
+  NOTES[k]=n;const had=NOTED.has(k);if(Object.keys(n).length)NOTED.add(k);else NOTED.delete(k);if(had!==NOTED.has(k))render();const list=$('#nl');if(!list||sel!==k)return;
   const near=list.scrollHeight-list.scrollTop-list.clientHeight<40,es=Object.entries(n).sort((a,b)=>a[0]<b[0]?-1:1);
   list.replaceChildren(...(es.length?es.map(([id,x])=>{const p=P[x.by];
     return h('div',{className:'note'+(x.by===me.k?' mine':'')},av(p||{displayName:x.byName},26),
@@ -498,23 +506,33 @@ async function loadHeads(ids){
     ls('heads',JSON.stringify(HEAD));render()
   }finally{headBusy=false}}
 
-const MARKS=[['open','Open (unmarked)'],['resolved','Resolved'],['denied','Denied'],['valid','Valid'],['ai','AI valid']];
-const markOf=r=>r.aiv?'ai':(r.status||'open');
-const fltLabel=()=>!flt.type?'Filter':flt.type==='word'?`Word: ${flt.val}`:`Marked: ${MARKS.find(m=>m[0]===flt.val)[1]}`;
-function matches(r){return!flt.type||(flt.type==='word'?r.word===flt.val:markOf(r)===flt.val)}
+const MARKS=[['open','Unchecked'],['noted','Noted'],['valid','Valid'],['ai','AI valid'],['resolved','Resolved'],['denied','Denied']];
+const MCOL={open:'#3d4b6e',noted:'#8a5cf0',valid:'#1f9d55',ai:'#d4a017',resolved:'#14b8a6',denied:'#c23b3b'};
+let NOTED=new Set();
+const markOf=r=>r.aiv?'ai':(r.status||(NOTED.has(r.k)?'noted':'open'));
+// Smooth gradient where each colour's share matches its % of the player's reports
+function userGrad(list){
+  const order=['valid','ai','resolved','noted','open','denied'],c={};for(const r of list)c[markOf(r)]=(c[markOf(r)]||0)+1;
+  const parts=order.filter(m=>c[m]).map(m=>[m,c[m]/list.length]);
+  if(parts.length===1)return{bg:`linear-gradient(135deg,${MCOL[parts[0][0]]},${MCOL[parts[0][0]]}99)`,c,parts};
+  let acc=0;const stops=parts.map(([m,f])=>{const mid=(acc+f/2)*100;acc+=f;return`${MCOL[m]} ${mid.toFixed(1)}%`});
+  return{bg:`linear-gradient(90deg,${stops.join(',')})`,c,parts}}
+const dot=m=>h('i',{className:'dot',style:`background:${MCOL[m]}`});
+const fltLabel=()=>!flt.type?'Filter':flt.type==='word'?`Word: ${flt.val}`:flt.val==='noted'?'Noted':`Marked: ${MARKS.find(m=>m[0]===flt.val)[1]}`;
+function matches(r){return!flt.type||(flt.type==='word'?r.word===flt.val:flt.val==='noted'?NOTED.has(r.k):markOf(r)===flt.val)}
 function paintFlt(anim){
   const box=$('#fw');
   box.replaceChildren(h('button',{textContent:fltLabel()+' \u25BE',onclick:e=>{e.stopPropagation();fOpen=!fOpen;fLvl='root';paintFlt()}}));
   if(!fOpen)return;
   const it=(t,fn)=>h('button',{className:'it',textContent:t,onclick:e=>{e.stopPropagation();fn()}}),items=[];
-  if(fLvl==='root')items.push(it('Show all',()=>pick(null,null)),it('Is by word',()=>zoom('word')),it('Is marked',()=>zoom('mark')));
+  if(fLvl==='root')items.push(it('Show all',()=>pick(null,null)),it('Is by word',()=>zoom('word')),it('Is marked',()=>zoom('mark')),it('Noted',()=>pick('mark','noted')));
   else{
     items.push(it('Back',()=>zoom('root')));
     if(fLvl==='word'){
       const c={};for(const r of Object.values(D))if(r.word)c[r.word]=(c[r.word]||0)+1;
       Object.entries(c).sort((a,b)=>b[1]-a[1]).forEach(([w,n])=>items.push(it(`${w} (${n})`,()=>pick('word',w))));
       if(items.length===1)items.push(h('div',{className:'mu pad',textContent:'No flagged words yet.'}))
-    }else MARKS.forEach(([v,l])=>items.push(it(l,()=>pick('mark',v))))}
+    }else MARKS.forEach(([v,l])=>{const b=it(l,()=>pick('mark',v));b.prepend(dot(v));items.push(b)})}
   box.append(h('div',{className:'pop'+(anim?' zin':'')},...items))}
 function zoom(l){const p=$('#fw .pop');if(p)p.classList.add('zout');setTimeout(()=>{fLvl=l;paintFlt(true)},170)}
 function pick(t,v){flt={type:t,val:v};fOpen=false;render();paintFlt()}
@@ -615,6 +633,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['2.2','2026-10-10',['A.F.R player tiles are coloured by their reports: each colour takes up as much of the tile as its share (valid, AI valid, noted, unchecked...)','New colours: Unchecked and Noted (reports with notes)','Filter: colour dots on Is marked, plus a new Noted filter']],
   ['2.1','2026-10-09',['Attach pictures to notes: \ud83d\udcce button, paste or drag and drop','Note pictures show up in the Report/Arrest Case files']],
   ['2.0','2026-10-09',['Notes chat on every report: leave notes for the other mods (updates every 5 seconds, delete your own)','Report/Arrest Case files show who validated each report, plus the report\u2019s notes']],
   ['1.9.5','2026-10-09',['Download all of a player\u2019s valid reports from their page in A.F.R, as Zip or HTML']],
@@ -850,6 +869,7 @@ async function load(){
   try{D=await api('/reports')||{};stat('Live')}catch(e){stat(e.message,1);return}
   try{P=await api('/profiles')||{}}catch{}
   try{SET=await api('/settings')||{}}catch{}
+  try{NOTED=new Set(Object.keys(await api('/notes','GET',undefined,'shallow=true')||{}))}catch{}
   await loadHist();
   if((view==='home'||view==='all')&&Date.now()-lastStats>60000)await loadStats();
   if(view==='launch')await loadLauncher();
