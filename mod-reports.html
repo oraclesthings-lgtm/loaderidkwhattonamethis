@@ -661,6 +661,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['2.5','2026-10-11',['Creator can turn their protection off in Profile settings']],
   ['2.4','2026-10-10',['Broadcast tab (Creator and Administrators only): post messages that show at the top of everyone\u2019s Main menu','Moderation tab (Creator and Administrators only): warn, kick, ban (1 hour to permanent), unban and clear warnings','Warnings pop up for the player and must be acknowledged; kicks and bans sign them out within seconds','Administrators can\u2019t act on the Creator','Moderation log of every action']],
   ['2.3','2026-10-10',['Roles: IsCreator and IsAdministratorLvl, set only in the Firebase console','Only the Creator or an Administrator can add or remove Launcher accounts','Creator and Admin tags next to names']],
   ['2.2','2026-10-10',['A.F.R player tiles are coloured by their reports: each colour takes up as much of the tile as its share (valid, AI valid, noted, unchecked...)','New colours: Unchecked and Noted (reports with notes)','Filter: colour dots on Is marked, plus a new Noted filter']],
@@ -723,7 +724,7 @@ function renderBc(main){
 
 // ---------- Moderation: warn, kick, ban ----------
 // Nobody can act on themselves, and Administrators can't act on the Creator
-const canAct=k=>canManage()&&k!==me.k&&!isCreator(k);
+const canAct=k=>canManage()&&k!==me.k&&(!isCreator(k)||SET.creatorUnprotected===true);
 const banOn=b=>!!b&&(!b.until||b.until>Date.now());
 const banUntil=b=>b.until?'until '+new Date(b.until).toLocaleString():'permanently';
 const banMsg=b=>`You are banned ${banUntil(b)}${b.byName?' by '+b.byName:''}.${b.reason?' Reason: '+b.reason:''}`;
@@ -834,6 +835,11 @@ function renderProf(main){
       const nh=await sha(me.k+':'+nw.value);
       if(await patchMe({pass:nh,prev:old})){ls('me',JSON.stringify({k:me.k,h:nh,kn:me.kn}));alert('Password changed.')}}}),
     msg,
+    ...(isCreator(me.k)?[h('b',{textContent:'Creator protection'}),
+      h('label',{className:'sw'},h('input',{type:'checkbox',checked:SET.creatorUnprotected!==true,onchange:async e=>{
+        const v=!e.target.checked;try{await api('/settings','PATCH',{creatorUnprotected:v});SET.creatorUnprotected=v;render()}catch(er){alert(er.message);e.target.checked=!v}}}),
+        h('span',{className:'knob'}),h('span',{textContent:'Protect me from Administrator actions'})),
+      h('small',{className:'mu',textContent:'When off, Administrators can act on your profile like anyone else’s.'})]:[]),
     h('button',{textContent:'Sign out',onclick:signout})))}
 
 const pend={};
