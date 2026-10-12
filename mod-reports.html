@@ -122,7 +122,12 @@ body.open aside{transform:none}
 .row.a-ai{border-left-color:#e0b020}
 .wd{margin-top:10px;font-family:Wingdings,'Wingdings 2','Wingdings 3',sans-serif;font-size:18px;letter-spacing:2px;color:var(--mu)}
 .pie{display:flex;flex-wrap:wrap;gap:24px;align-items:center;padding:16px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(145deg,#151c2d,#0e1420)}
-.pie svg{width:200px;height:200px;flex:none}
+.pie svg{width:280px;height:198px;flex:none}
+.pie circle.seg3{fill:none;stroke-width:38}
+.pie circle.seg3.top{transition:filter .15s}
+.pie circle.seg3.top:hover{filter:brightness(1.25)}
+.pin3{animation:pin3 .5s cubic-bezier(.2,.8,.2,1)}
+@keyframes pin3{from{opacity:0;transform:translateY(16px) scale(.85)}to{opacity:1;transform:none}}
 .pie circle.seg{fill:none;stroke-width:34;transition:stroke-width .15s}
 .pie circle.seg:hover{stroke-width:40}
 .pie .ctr{fill:var(--tx);font-size:26px;font-weight:700;text-anchor:middle}
@@ -136,7 +141,7 @@ body.open aside{transform:none}
 .seg2 button.on{background:linear-gradient(135deg,#3b55c9,#6b44c8)}
 .pin{animation:pin .45s cubic-bezier(.2,.8,.2,1)}
 @keyframes pin{from{opacity:0;transform:rotate(-120deg) scale(.6)}to{opacity:1;transform:none}}
-@media(prefers-reduced-motion:reduce){.pin{animation:none}}
+@media(prefers-reduced-motion:reduce){.pin,.pin3{animation:none}}
 .cl{margin:0;padding-left:18px;display:grid;gap:4px}
 .ok{color:#4bd18b}
 .bad{color:#ff9a9a}
@@ -307,39 +312,52 @@ function renderHome(main){
     h('h2',{className:'sec',textContent:'Flagged words'}),pieChart(),
     h('h2',{className:'sec',textContent:'Recent activity'}),histList(6))}
 
-let pieMode='reports',pieAnim=true;
+let pieMode='reports',pieFlt='all',pieAnim=true;
 const PIE_COLORS=['#6f8cff','#f0c040','#2fbf70','#e25b5b','#b07cff','#3ec7d6','#ff9a4a'];
-function wordData(mode){
+const PIE_FLT=[['all','All reports'],['valid','Validated'],['notvalid','Not validated'],['resolved','Resolved'],['denied','Denied']];
+function wordData(mode,flt='all'){
   // Current reports plus handled ones from History (so deleted reports still count)
-  const seen=new Map();
-  for(const k in D){const r=D[k];if(r.word)seen.set(k,{w:r.word,u:String(r.userId??r.username)})}
-  for(const id in HA){const e=HA[id],rid=e.reportId||id;if(e.word&&!seen.has(rid))seen.set(rid,{w:e.word,u:String(e.userId??e.username)})}
-  const c={};
-  if(mode==='reports')for(const v of seen.values())c[v.w]=(c[v.w]||0)+1;
-  else{const pairs=new Set();for(const v of seen.values())pairs.add(v.w+'\u0000'+v.u);for(const p of pairs){const w=p.split('\u0000')[0];c[w]=(c[w]||0)+1}}
+  const seen=new Map(),ever=new Set(),last={};
+  for(const id of Object.keys(HA).sort()){const e=HA[id],rid=e.reportId||id;
+    if(e.action==='valid')ever.add(rid);
+    if(['valid','resolved','denied','cleared'].includes(e.action))last[rid]=e.action;
+    if(e.word&&!seen.has(rid))seen.set(rid,{w:e.word,u:String(e.userId??e.username)})}
+  for(const k in D){const r=D[k];if(r.status==='valid'||r.aiv||r.validBy)ever.add(k);last[k]=r.status||'cleared';if(r.word)seen.set(k,{w:r.word,u:String(r.userId??r.username)})}
+  const keep=rid=>flt==='all'||(flt==='valid'?ever.has(rid):flt==='notvalid'?!ever.has(rid):last[rid]===flt);
+  const vals=[...seen.entries()].filter(([rid])=>keep(rid)).map(([,v])=>v),c={};
+  if(mode==='reports')for(const v of vals)c[v.w]=(c[v.w]||0)+1;
+  else{const pairs=new Set();for(const v of vals)pairs.add(v.w+'\u0000'+v.u);for(const p of pairs){const w=p.split('\u0000')[0];c[w]=(c[w]||0)+1}}
   let rows=Object.entries(c).sort((a,b)=>b[1]-a[1]);
   if(rows.length>7){const rest=rows.slice(6).reduce((n,r)=>n+r[1],0);rows=[...rows.slice(0,6),['Other',rest]]}
-  rows.users=new Set([...seen.values()].map(v=>v.u)).size;
+  rows.users=new Set(vals.map(v=>v.u)).size;
   return rows}
+const shade=(hex,f)=>'#'+[1,3,5].map(i=>Math.round(parseInt(hex.slice(i,i+2),16)*f).toString(16).padStart(2,'0')).join('');
 function pieChart(){
-  const rows=wordData(pieMode),order=wordData('reports').map(r=>r[0]),col=w=>w==='Other'?'#4a5670':PIE_COLORS[Math.max(0,order.indexOf(w))%7],total=rows.reduce((n,r)=>n+r[1],0),NS='http://www.w3.org/2000/svg',R=70,C=2*Math.PI*R;
-  const sw=h('div',{className:'seg2'},...[['reports','Reports'],['users','Users']].map(([m,l])=>h('button',{className:pieMode===m?'on':'',textContent:l,onclick:()=>{
-    if(pieMode===m)return;const box=$('#pieBox');if(box)box.classList.add('zout');setTimeout(()=>{pieMode=m;pieAnim=true;render()},170)}})));
-  if(!total)return h('div',{},sw,h('p',{className:'mu',textContent:'No flagged words yet.'}));
-  const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 200 200');svg.setAttribute('role','img');
-  svg.setAttribute('aria-label',`Flagged words by ${pieMode}`);
-  if(pieAnim)svg.classList.add('pin');
-  let off=0;
-  rows.forEach(([w,n],i)=>{
-    const len=n/total*C,el=document.createElementNS(NS,'circle');
-    Object.entries({cx:100,cy:100,r:R,class:'seg',stroke:col(w),'stroke-dasharray':`${Math.max(len-1.5,.5)} ${C}`,'stroke-dashoffset':-off,transform:'rotate(-90 100 100)'}).forEach(([a,v])=>el.setAttribute(a,v));
-    const t=document.createElementNS(NS,'title');t.textContent=`${w}: ${n} (${(n/total*100).toFixed(1)}%)`;el.append(t);svg.append(el);off+=len});
-  const tx=(y,cls,txt)=>{const t=document.createElementNS(NS,'text');t.setAttribute('x',100);t.setAttribute('y',y);t.setAttribute('class',cls);t.textContent=txt;return t};
-  svg.append(tx(104,'ctr',pieMode==='reports'?total:rows.users),tx(124,'ctr2',pieMode==='reports'?'reports':'users'));
-  const lg=h('div',{className:'lg'},...rows.map(([w,n],i)=>h('div',{},h('i',{style:`background:${col(w)}`}),h('b',{textContent:w}),
+  const rows=wordData(pieMode,pieFlt),order=rows.map(r=>r[0]),col=w=>w==='Other'?'#4a5670':PIE_COLORS[Math.max(0,order.indexOf(w))%7],total=rows.reduce((n,r)=>n+r[1],0),NS='http://www.w3.org/2000/svg',R=72,C=2*Math.PI*R;
+  const swap=fn=>{const box=$('#pieBox');if(box)box.classList.add('zout');setTimeout(()=>{fn();pieAnim=true;render()},170)};
+  const sw=h('div',{className:'seg2'},...[['reports','Reports'],['users','Users']].map(([m,l])=>h('button',{className:pieMode===m?'on':'',textContent:l,onclick:()=>{if(pieMode!==m)swap(()=>pieMode=m)}})));
+  const fs=h('div',{className:'seg2',style:'margin-left:10px'},...PIE_FLT.map(([m,l])=>h('button',{className:pieFlt===m?'on':'',textContent:l,onclick:()=>{if(pieFlt!==m)swap(()=>pieFlt=m)}})));
+  const bar=h('div',{style:'display:flex;flex-wrap:wrap;gap:0 0'},sw,fs);
+  if(!total)return h('div',{},bar,h('div',{id:'pieBox',className:'pie'+(pieAnim?' zin':'')},h('p',{className:'mu',style:'margin:0',textContent:pieFlt==='all'?'No flagged words yet.':'No reports match this filter yet.'})));
+  // 2.5D donut: the ring is squashed into an ellipse and stacked in darker layers to give it depth
+  const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 240 170');svg.setAttribute('role','img');
+  svg.setAttribute('aria-label',`Flagged words by ${pieMode}`);if(pieAnim)svg.classList.add('pin3');
+  const el=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e};
+  const TILT=.55,DEPTH=16,STEP=1;
+  const ring=(dy,top)=>{const g=el('g',{transform:`translate(120,${66+dy}) scale(1,${TILT})`});let off=0;
+    rows.forEach(([w,n])=>{const len=n/total*C,c=el('circle',{cx:0,cy:0,r:R,class:top?'seg3 top':'seg3',stroke:top?col(w):shade(col(w),.45+.25*(1-dy/DEPTH)),
+      'stroke-dasharray':`${Math.max(len-(top?1.5:0),.5)} ${C}`,'stroke-dashoffset':-off,transform:'rotate(-90)'});
+      if(top){const t=el('title',{});t.textContent=`${w}: ${n} (${(n/total*100).toFixed(1)}%)`;c.append(t)}g.append(c);off+=len});return g};
+  svg.append(el('ellipse',{cx:120,cy:66+DEPTH+10,rx:R+24,ry:(R+24)*TILT,fill:'#000',opacity:.35,filter:'url(#pblur)'}));
+  const defs=el('defs',{});defs.innerHTML='<filter id="pblur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>';svg.prepend(defs);
+  for(let d=DEPTH;d>0;d-=STEP)svg.append(ring(d,false));
+  svg.append(ring(0,true));
+  const tx=(y,cls,txt)=>{const t=el('text',{x:120,y,class:cls});t.textContent=txt;return t};
+  svg.append(tx(68,'ctr',pieMode==='reports'?total:rows.users),tx(84,'ctr2',pieMode==='reports'?'reports':'users'));
+  const lg=h('div',{className:'lg'},...rows.map(([w,n])=>h('div',{},h('i',{style:`background:${col(w)}`}),h('b',{textContent:w}),
     h('span',{textContent:`${(n/total*100).toFixed(1)}%`}),h('small',{className:'mu',textContent:`(${n})`}))));
   const box=h('div',{id:'pieBox',className:'pie'+(pieAnim?' zin':'')},svg,lg);pieAnim=false;
-  return h('div',{},sw,box,pieMode==='users'?h('small',{className:'mu',style:'display:block;margin-top:6px',textContent:'A player flagged for two different words counts once in each.'}):'')}
+  return h('div',{},bar,box,pieMode==='users'?h('small',{className:'mu',style:'display:block;margin-top:6px',textContent:'A player flagged for two different words counts once in each.'}):'')}
 
 function renderHist(main){main.append(histList(200))}
 
@@ -661,6 +679,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['2.6','2026-10-12',['Flagged words pie chart is now 2.5D','Pie chart filters: All, Validated, Not validated, Resolved, Denied']],
   ['2.5','2026-10-11',['Creator can turn their protection off in Profile settings']],
   ['2.4','2026-10-10',['Broadcast tab (Creator and Administrators only): post messages that show at the top of everyone\u2019s Main menu','Moderation tab (Creator and Administrators only): warn, kick, ban (1 hour to permanent), unban and clear warnings','Warnings pop up for the player and must be acknowledged; kicks and bans sign them out within seconds','Administrators can\u2019t act on the Creator','Moderation log of every action']],
   ['2.3','2026-10-10',['Roles: IsCreator and IsAdministratorLvl, set only in the Firebase console','Only the Creator or an Administrator can add or remove Launcher accounts','Creator and Admin tags next to names']],
