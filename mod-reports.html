@@ -210,6 +210,22 @@ select{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding
 #wm .box{max-width:440px;width:100%;padding:20px;border-radius:10px;border:1px solid #f0c04088;background:linear-gradient(160deg,#3a2e0c,#121826 60%);display:grid;gap:10px}
 #wm h2{margin:0}
 #wm button{background:linear-gradient(135deg,#c99a14,#7a5a0c);border-color:#f0c040}
+#ob{position:fixed;inset:0;z-index:40;background:#0006}
+#ob .card{position:fixed;right:20px;bottom:20px;width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto;padding:20px;border-radius:12px;border:1px solid #7a8cff66;background:linear-gradient(160deg,#1f2a5c,#121826 65%);box-shadow:0 20px 50px #000c;display:grid;gap:12px}
+#ob .obk{font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#ffffffb0}
+#ob h2{margin:0;font-size:21px}
+#ob ul{margin:0;padding-left:18px;display:grid;gap:7px}
+#ob .obd{display:flex;gap:5px;flex-wrap:wrap}
+#ob .obd i{width:8px;height:8px;border-radius:50%;background:#ffffff30}
+#ob .obd i.on{background:var(--ac)}
+#ob .obd i.dn{background:#ffffff70}
+#ob .obb{display:flex;gap:8px;align-items:center}
+#ob .obb .sp{flex:1}
+#ob .nx2{background:linear-gradient(135deg,#3b55c9,#6b44c8);border-color:#7a8cff55}
+.nv.ob{box-shadow:0 0 0 2px #f0c040;animation:obp 1.4s ease-in-out infinite}
+@keyframes obp{50%{box-shadow:0 0 0 6px #f0c04044}}
+@media(prefers-reduced-motion:reduce){.nv.ob{animation:none}}
+@media(max-width:760px){#ob .card{left:16px;right:16px;bottom:16px;width:auto}}
 @media(max-width:760px){.me{display:none}}
 @media(max-width:760px){
   #nav{position:static;width:auto;flex-direction:row;overflow-x:auto;padding:8px}
@@ -246,6 +262,7 @@ select{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding
     <button id="rv" hidden>Resolve all valid</button>
     <span id="cd" hidden></span>
     <span id="st"></span>
+    <button id="obh" title="Replay onboarding">?</button>
     <button id="rf" title="Refresh">Refresh</button>
   </header>
   <main id="main"></main>
@@ -289,7 +306,7 @@ function go(v){view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0
 function paintNav(){
   const open=Object.values(D).filter(r=>!r.status).length;
   $('#nav').replaceChildren(h('div',{className:'brand',textContent:'Mod Reports'}),
-    ...NAV.filter(([id])=>!STAFF.has(id)||canManage()).map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':''),onclick:()=>go(id)},
+    ...NAV.filter(([id])=>!STAFF.has(id)||canManage()).map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':'')+(obHl()===id?' ob':''),onclick:()=>go(id)},
       h('b',{textContent:t}),h('small',{textContent:s}),
       ...(id==='afr'&&open?[h('span',{className:'bd',textContent:open})]:[]))),
     h('div',{className:'me'},av(P[me.k],34),h('b',{textContent:P[me.k]?.displayName||me.k},roleTag(me.k)),h('button',{textContent:'Sign out',onclick:signout})))}
@@ -679,6 +696,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['2.7','2026-10-12',['Onboarding: a guided tour of every tab starts on your first sign-in','Replay it any time with the ? button at the top or from Profile settings']],
   ['2.6','2026-10-12',['Flagged words pie chart is now 2.5D','Pie chart filters: All, Validated, Not validated, Resolved, Denied']],
   ['2.5','2026-10-11',['Creator can turn their protection off in Profile settings']],
   ['2.4','2026-10-10',['Broadcast tab (Creator and Administrators only): post messages that show at the top of everyone\u2019s Main menu','Moderation tab (Creator and Administrators only): warn, kick, ban (1 hour to permanent), unban and clear warnings','Warnings pop up for the player and must be acknowledged; kicks and bans sign them out within seconds','Administrators can\u2019t act on the Creator','Moderation log of every action']],
@@ -713,6 +731,53 @@ function renderLog(main){
   main.append(h('div',{className:'list'},...CHANGES.map(([v,d,items])=>h('div',{className:'pc'},
     h('div',{className:'hd'},h('b',{textContent:'v'+v}),h('small',{className:'mu',textContent:d})),
     h('ul',{className:'cl'},...items.map(t=>h('li',{textContent:t}))),...(/1/.test(v)&&/7/.test(v)?[h('div',{className:'wd',title:'W.D. GASTER WAS HERE',textContent:'W.D. GASTER WAS HERE'})]:[])))))}
+
+// ---------- Onboarding ----------
+// Starts on sign-in unless profiles/<username>/OnboardingC is true. Finishing or skipping sets it to true.
+let OB=null;
+const OBS=[
+  {v:'home',hl:false,t:()=>`Welcome, ${P[me.k]?.displayName||me.k}!`,b:['This quick tour walks you through every tab and what it’s for.','Use Next and Back (or the arrow keys) to move around. Skip tour ends it.','You can replay it any time with the ? button at the top, or from Profile settings.']},
+  {v:'home',t:'Main menu',b:['Messages from staff (broadcasts) show at the very top.','Your stats: how many reports you’ve resolved, denied and marked valid, today, this month, this year and overall.','Reports overview: how many reports are open, handled, or marked valid by the AI.','Flagged words chart: which words get players flagged most. Switch between Reports and Users, and filter by status.','Recent activity: the latest actions taken by everyone.']},
+  {v:'afr',t:'A.F.R: flagged players',b:['Every player whose chat got flagged gets a tile here. The number on the tab is how many reports are still open.','Each tile is coloured by its reports: the more reports with one status, the more of the tile that colour. The legend above the tiles shows what each colour means.','Find a user searches by name, username or ID. Filter shows only one word, one status, or reports that have notes.','Click a player to see all of their reports.']},
+  {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 10 seconds, so click the same button again to cancel.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).']},
+  {v:'afr',t:'Notes and downloads',b:['Notes: chat with the other mods about a report. Enter sends, Shift+Enter makes a new line. Paste, drop or 📎 a picture to attach it. You can delete your own notes.','⬇ Download report saves one report as a Zip or as an HTML Report/Arrest Case file.','On a player’s page, Download all valid grabs every valid report for that player.','Reports without a screenshot are left out of downloads.']},
+  {v:'afr',t:'Export and Resolve all',b:['Export valid saves every valid report as a zip: a folder per player with the screenshots, plus a Report/Arrest Case file with the charges and total time required.','Resolve all valid marks every valid report as Resolved at once. They get deleted after 10 seconds, with a Cancel button at the top.','Tip: export first if you want to keep a copy.']},
+  {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in.','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','The line under the switch tells you whether the AI is online right now.']},
+  {v:'launch',t:'Launcher',b:['Launch an account into the game in one click, or tick several and use Launch selected.','Pick bot accounts with the Bots button. Each bot shows whether it’s online, hopping servers or disconnected.','Auto-Call Bot when down relaunches a bot that disconnects or goes quiet for 2 minutes.','Only the Creator and Administrators can add or remove accounts.','Recent launches shows what was launched and whether it worked.']},
+  {v:'hist',t:'History',b:['Every action anyone takes on a report: resolved, denied, valid, reopened and deleted.','Each line shows the player, their message, who did it and when.']},
+  {v:'all',t:'All profiles',b:['Everyone’s stats side by side, with Creator and Admin tags.','If someone hid their stats, you’ll see nil instead of numbers.']},
+  {v:'prof',t:'Profile settings',b:['Set a profile picture, change your display name or password.','Hide my stats: other mods see nil instead of your numbers.','🧭 Replay onboarding starts this tour again.']},
+  {v:'bc',staff:true,t:'Broadcast',b:['Post a message for everyone. The newest 3 show at the top of the Main menu.','Pick a level: 📢 Announcement, ⚠️ Warning or 🚨 Important.','Remove a broadcast once it’s no longer needed. Administrators can’t remove the Creator’s.']},
+  {v:'mod',staff:true,t:'Moderation',b:['⚠ Warn: they get a pop-up they have to accept before carrying on.','👢 Kick: signs them out within seconds.','⛔ Ban: signs them out and keeps them out for 1 hour up to permanently. ✅ Unban lifts it early.','🧹 Clear warnings removes all of their warnings.','The Moderation log lists every action. Administrators can’t act on the Creator.']},
+  {v:'log',t:'Changelogs',b:['Every update and what it changed, newest first.']},
+  {v:'home',hl:false,t:'You’re all set',b:['That’s everything. Open A.F.R to start working on reports.','Need a refresher? Press ? at the top, or Replay onboarding in Profile settings.']},
+];
+const obSteps=()=>OBS.filter(s=>!s.staff||canManage());
+function obHl(){if(OB===null||!me)return null;const s=obSteps()[OB];return s&&s.hl!==false?s.v:null}
+async function obCheck(k,rec){
+  let done;try{done=await api(`/profiles/${k}/OnboardingC`)}catch{done=rec?.OnboardingC}
+  if(done!==true&&me&&me.k===k&&OB===null)startOb()}
+function startOb(){if(!me)return;fOpen=false;bOpen=false;if(sel)closeSide();OB=0;showOb(true)}
+function showOb(anim){
+  const ss=obSteps();if(OB===null||!ss[OB])return endOb();
+  const s=ss[OB],last=OB===ss.length-1;
+  if(view!==s.v)go(s.v);else render();
+  const back=h('button',{className:'obbk',textContent:'Back',disabled:!OB,onclick:()=>{OB--;showOb()}});
+  const next=h('button',{className:'nx2',textContent:last?'Finish':'Next',onclick:()=>{if(last)endOb();else{OB++;showOb()}}});
+  const box=h('div',{id:'ob'},h('div',{className:'card'+(anim?' zin':''),role:'dialog'},
+    h('div',{className:'obk',textContent:`Step ${OB+1} of ${ss.length}${s.staff?' · Staff only':''}`}),
+    h('h2',{textContent:typeof s.t==='function'?s.t():s.t}),
+    h('ul',{},...s.b.map(t=>h('li',{textContent:t}))),
+    h('div',{className:'obd'},...ss.map((_,i)=>h('i',{className:i===OB?'on':i<OB?'dn':''}))),
+    h('div',{className:'obb'},h('button',{textContent:'Skip tour',onclick:endOb}),h('span',{className:'sp'}),back,next)));
+  $('#ob')?.remove();document.body.append(box);next.focus()}
+function endOb(){
+  if(OB===null)return;OB=null;$('#ob')?.remove();go('home');
+  if(me&&P[me.k]?.OnboardingC!==true){const k=me.k;api('/profiles/'+k,'PATCH',{OnboardingC:true}).then(()=>{if(P[k])P[k].OnboardingC=true}).catch(()=>{})}}
+addEventListener('keydown',e=>{if(OB===null||$('#wm'))return;
+  if(e.key==='Escape'){e.stopImmediatePropagation();endOb()}
+  else if(e.key==='ArrowRight'){e.preventDefault();$('#ob .nx2')?.click()}
+  else if(e.key==='ArrowLeft'){e.preventDefault();const b=$('#ob .obbk');if(b&&!b.disabled)b.click()}},true);
 
 // Roles are set by hand in the Firebase console only (profiles/<username>/IsCreator, IsAdministratorLvl)
 const isCreator=k=>P[k]?.IsCreator===true,isAdmin=k=>P[k]?.IsAdministratorLvl===true,canManage=()=>isCreator(me.k)||isAdmin(me.k);
@@ -859,6 +924,8 @@ function renderProf(main){
         const v=!e.target.checked;try{await api('/settings','PATCH',{creatorUnprotected:v});SET.creatorUnprotected=v;render()}catch(er){alert(er.message);e.target.checked=!v}}}),
         h('span',{className:'knob'}),h('span',{textContent:'Protect me from Administrator actions'})),
       h('small',{className:'mu',textContent:'When off, Administrators can act on your profile like anyone else’s.'})]:[]),
+    h('b',{textContent:'Onboarding'}),
+    h('button',{textContent:'🧭 Replay onboarding',onclick:startOb}),
     h('button',{textContent:'Sign out',onclick:signout})))}
 
 const pend={};
@@ -1048,7 +1115,7 @@ async function load(){
   if(view==='launch')await loadLauncher();
   if(sel&&!D[sel])closeSide();else if(!busy())render()}
 
-$('#rf').onclick=load;$('#ex').onclick=exportValid;$('#rv').onclick=resolveAllValid;$('#q').oninput=render;
+$('#rf').onclick=load;$('#obh').onclick=startOb;$('#ex').onclick=exportValid;$('#rv').onclick=resolveAllValid;$('#q').oninput=render;
 $('#back').onclick=()=>{user=null;render()};
 addEventListener('keydown',e=>{if(e.key==='Escape'&&sel)closeSide()});
 addEventListener('click',()=>{if(fOpen){fOpen=false;paintFlt()}if(bOpen){bOpen=false;render()}});
@@ -1069,7 +1136,7 @@ function enter(k,rec,kn){
   if(banOn(rec.ban)){ls('me',null);showLogin();return err(banMsg(rec.ban))}
   kn??=rec.kickN||0;
   if((rec.kickN||0)>kn){ls('me',null);showLogin();return err(kickMsg(rec.kick)+' Sign in again.')}
-  me={k,kn};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass,kn}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load()}
+  me={k,kn};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass,kn}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load();obCheck(k,rec)}
 function signout(){ls('me',null);location.reload()}
 function showLogin(){$('#login').hidden=false;const m=ls('kickmsg');if(m){ls('kickmsg',null);err(m)}}
 $('#mk').onclick=()=>setMode(mode==='in'?'new':'in');
