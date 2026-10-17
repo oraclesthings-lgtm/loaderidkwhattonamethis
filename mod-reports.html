@@ -29,11 +29,11 @@ button:disabled{opacity:.55;cursor:default}
 #content{margin-left:208px}
 body.open #content{margin-right:380px}
 
-header{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;padding:12px 16px;
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;
   background:linear-gradient(90deg,#0b1020d9,#090c13d9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 header h1{font-size:17px;margin:0;flex:1;white-space:nowrap}
 #q{width:200px}
-#st{font-size:12px;white-space:nowrap}
+#st{font-size:12px;white-space:nowrap;min-width:92px;text-align:right}
 main{padding:16px}
 h2{margin:0 0 14px;font-size:18px}
 h2.sec{margin-top:28px}
@@ -237,6 +237,47 @@ select{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding
   #q{width:120px}
 }
 @media(prefers-reduced-motion:reduce){aside{transition:none}}
+/* ---- 3.0 interface update ---- */
+#toasts{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:70;display:grid;gap:8px;justify-items:center;pointer-events:none;width:min(560px,calc(100vw - 32px))}
+.toast{pointer-events:auto;display:flex;gap:12px;align-items:center;max-width:100%;padding:10px 14px;border-radius:10px;border:1px solid #7a8cff55;background:linear-gradient(135deg,#1f2a5c,#141a33);box-shadow:0 12px 30px #000a;cursor:pointer;animation:tin .2s ease-out}
+.toast.ok{border-color:#37c97888;background:linear-gradient(135deg,#14502f,#101a14)}
+.toast.bad{border-color:#e25b5b88;background:linear-gradient(135deg,#5a1f24,#1e1214)}
+.toast .tt{flex:1;white-space:pre-wrap;word-break:break-word}
+.toast button{flex:none;padding:5px 12px;font-weight:600}
+.toast.out{opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s}
+@keyframes tin{from{opacity:0;transform:translateY(10px)}}
+.att-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:28px}
+.att{display:grid;gap:2px;text-align:left;padding:14px 16px;border-radius:10px;border:1px solid var(--line);border-left-width:4px;background:linear-gradient(145deg,#171f33,#0f1522)}
+.att .n{font-size:30px;font-weight:700;line-height:1.1}
+.att small{color:var(--mu)}
+.att.o{border-left-color:#55648a}
+.att.v{border-left-color:#2fbf70}
+.att.y{border-left-color:#f0c040}
+.att.done{border-left-color:#2fbf70;cursor:default}
+.att.skel{min-height:96px}
+.trow{display:flex!important;gap:8px;justify-content:space-between}
+.trow .tm2{flex:none;opacity:.85}
+mark{background:#f0c04040;color:inherit;border-radius:3px;padding:0 2px;box-shadow:0 0 0 1px #f0c04080}
+.snav{display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:8px}
+.snav button{padding:3px 10px;font-size:16px;line-height:1.2}
+.snav small{color:var(--mu);min-width:44px;text-align:center;font-size:12px}
+.cp{margin-left:8px;padding:1px 8px;font-size:12px;vertical-align:1px}
+.plink{display:inline-block;margin-top:8px;color:var(--ac);font-size:13px}
+.an{margin-top:10px;font-size:13px;color:var(--mu)}
+.keys{display:block;margin-top:16px;color:var(--mu);font-size:12px;line-height:2}
+kbd{display:inline-block;min-width:18px;padding:0 5px;margin:0 1px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;background:#0e1420;font:600 11px/16px system-ui,sans-serif;text-align:center;color:var(--tx)}
+.skel{background:linear-gradient(90deg,#141b2b 25%,#1d2742 50%,#141b2b 75%)!important;background-size:200% 100%!important;border:1px solid var(--line);animation:sk 1.2s linear infinite}
+@keyframes sk{to{background-position:-200% 0}}
+.hbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.hbar .seg2{margin-bottom:0;flex-wrap:wrap}
+.hbar input:not([type=checkbox]){flex:1;min-width:200px;max-width:340px}
+#rf{font-size:17px;line-height:1;padding:7px 11px}
+#rf.spin{opacity:.5}
+.sb.ok,.sb.no{color:inherit}
+.acts .sb{padding:8px 6px;white-space:nowrap}
+header button{padding:7px 10px}
+#st{min-width:0}
+@media(prefers-reduced-motion:reduce){.skel{animation:none}.toast{animation:none}}
 </style>
 </head>
 <body>
@@ -256,14 +297,15 @@ select{background:#0e1420;border:1px solid var(--line);border-radius:6px;padding
   <header>
     <button id="back" hidden>Back</button>
     <h1 id="title"></h1>
-    <input id="q" placeholder="Find a user">
+    <input id="q" placeholder="Find a player or message">
+    <select id="sort" hidden title="Sort players"></select>
     <div id="fw" hidden></div>
     <button id="ex" hidden>Export valid</button>
     <button id="rv" hidden>Resolve all valid</button>
     <span id="cd" hidden></span>
     <span id="st"></span>
     <button id="obh" title="Replay onboarding">?</button>
-    <button id="rf" title="Refresh">Refresh</button>
+    <button id="rf" title="Refresh now (it also updates every 20 seconds)" aria-label="Refresh">⟳</button>
   </header>
   <main id="main"></main>
 </div>
@@ -274,7 +316,7 @@ const DB=window.__CFG?.db;
 if(!DB){document.body.textContent='Open the dashboard through mod-reports-loader.html.';throw new Error('no config')}
 const $=s=>document.querySelector(s);
 const h=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);e.append(...k);return e};
-let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={},B={},W={},ML={},modErr='',modOpen=null;
+let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={},B={},W={},ML={},modErr='',modOpen=null,loading=false,loaded=false,lastLoad=0,stBad=false,seenKeys=null,hf={a:'all',mine:false,q:''};
 
 const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation'};
 const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed']];
@@ -286,7 +328,38 @@ async function api(path,method='GET',body,qs){
   const r=await fetch(`${DB}${path}.json${qs?'?'+qs:''}`,{method,body:body===undefined?undefined:JSON.stringify(body)});
   if(!r.ok)throw new Error(r.status==401?'Permission denied, check the database rules':'HTTP '+r.status);
   return r.json()}
-const stat=(t,bad)=>{const e=$('#st');e.textContent=t;e.style.color=bad?'#ff9a9a':'#4bd18b'};
+const stat=(t,bad)=>{stBad=!!bad;const e=$('#st');e.textContent=t;e.style.color=bad?'#ff9a9a':'#4bd18b'};
+
+// ---------- Notices (toasts) instead of pop-up boxes ----------
+function toast(msg,o={}){
+  let box=$('#toasts');if(!box){box=h('div',{id:'toasts'});box.setAttribute('role','status');box.setAttribute('aria-live','polite');document.body.append(box)}
+  const t=h('div',{className:'toast '+(o.kind||'')},h('span',{className:'tt',textContent:String(msg)}));
+  const kill=()=>{if(!t.isConnected)return;t.classList.add('out');setTimeout(()=>t.remove(),200)};
+  if(o.action)t.append(h('button',{textContent:o.action,onclick:e=>{e.stopPropagation();kill();o.onAction&&o.onAction()}}));
+  t.onclick=kill;box.append(t);
+  while(box.children.length>4)box.firstChild.remove();
+  setTimeout(kill,o.ms||Math.min(12000,3500+String(msg).length*45));
+  return kill}
+window.alert=m=>toast(String(m),{kind:/error|http \d|denied|can.?t|couldn|fail|wrong/i.test(String(m))?'bad':''});
+async function copyText(t){
+  t=String(t);
+  try{await navigator.clipboard.writeText(t)}catch{const a=h('textarea',{value:t});document.body.append(a);a.select();try{document.execCommand('copy')}catch{}a.remove()}
+  toast('Copied: '+t,{kind:'ok',ms:2200})}
+// Wraps the flagged word in <mark> without using innerHTML
+function hl(text,word){
+  const out=document.createDocumentFragment();text=String(text??'');
+  if(!word){out.append(text);return out}
+  const re=new RegExp('(^|[^A-Za-z0-9])('+String(word).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')(?![A-Za-z0-9])','gi');
+  let last=0,m;
+  while((m=re.exec(text))){const st=m.index+m[1].length;out.append(text.slice(last,st),h('mark',{textContent:m[2]}));last=st+m[2].length;if(re.lastIndex<=m.index)re.lastIndex=m.index+1}
+  out.append(text.slice(last));return out}
+const kbd=t=>h('kbd',{textContent:t});
+const autoNext=()=>ls('autonext')==='1';
+function ping(){try{const c=ping.c||(ping.c=new(window.AudioContext||window.webkitAudioContext)()),t=c.currentTime,o=c.createOscillator(),g=c.createGain();
+  o.type='sine';o.frequency.setValueAtTime(880,t);o.frequency.exponentialRampToValueAtTime(1320,t+.12);
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.15,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.35);
+  o.connect(g).connect(c.destination);o.start(t);o.stop(t+.4)}catch{}}
+const when=t=>!t?'':Date.now()-t<6048e5?ago(t):new Date(t).toLocaleDateString();
 
 async function loadHist(){
   try{H=await api('/history','GET',undefined,'orderBy=%22%24key%22&limitToLast=200')||{};hErr=false}catch{hErr=true}}
@@ -302,9 +375,10 @@ function groups(ff){
   return Object.entries(m).map(([id,list])=>{list.sort((a,b)=>a.k<b.k?1:-1);return{id,list,name:list[0].displayName,user:list[0].username}})
     .sort((a,b)=>a.list[0].k<b.list[0].k?1:-1)}
 
-function go(v){view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(st)loadStats().then(render);if(v==='mod')loadMod().then(render);if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
+function go(v){const fromPlayer=view==='afr'&&v==='afr'&&user!=null;view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(fromPlayer)restoreGridY();else window.scrollTo(0,0);if(st)loadStats().then(render);if(v==='mod')loadMod().then(render);if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
 function paintNav(){
   const open=Object.values(D).filter(r=>!r.status).length;
+  document.title=open?`(${open}) Mod Reports`:'Mod Reports';
   $('#nav').replaceChildren(h('div',{className:'brand',textContent:'Mod Reports'}),
     ...NAV.filter(([id])=>!STAFF.has(id)||canManage()).map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':'')+(obHl()===id?' ob':''),onclick:()=>go(id)},
       h('b',{textContent:t}),h('small',{textContent:s}),
@@ -318,13 +392,16 @@ function render(){
   $('#title').textContent=TITLE[view];
   $('#back').hidden=!(view==='afr'&&user);
   $('#q').hidden=!(view==='afr'&&!user);
+  $('#sort').hidden=!(view==='afr'&&!user);
   $('#ex').hidden=view!=='afr';{const n=Object.values(D).filter(r=>r.status==='valid').length;$('#rv').hidden=view!=='afr';$('#rv').disabled=!n;$('#rv').textContent=`✅ Resolve all valid (${n})`}$('#fw').hidden=view!=='afr';$('#ex').textContent=`Export valid (${Object.values(D).filter(r=>r.status==='valid').length})`;
-  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod}[view])(main)}
+  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod}[view])(main);
+  paintSnav()}
 
 function renderHome(main){
   const rs=Object.values(D),n=s=>rs.filter(r=>r.status===s&&!r.aiv).length;
   const S=[['Open',rs.filter(r=>!r.status).length,'o'],['Resolved',n('resolved'),'g'],['Denied',n('denied'),'r'],['Valid, can\u2019t act yet',n('valid'),'v'],['AI valid',rs.filter(r=>r.aiv).length,'y'],['Total reports',rs.length,''],['Users flagged',groups().length,'']];
   main.append(bcBanners(),
+    h('h2',{textContent:'Needs attention'}),attention(),
     h('h2',{textContent:'Your stats'}),tiles(statsFor(me.k)),h('h2',{className:'sec',textContent:'Reports overview'}),h('div',{className:'grid stats'},...S.map(([l,v,c])=>h('div',{className:'stat '+c},h('div',{className:'n',textContent:v}),h('small',{textContent:l})))),
     h('h2',{className:'sec',textContent:'Flagged words'}),pieChart(),
     h('h2',{className:'sec',textContent:'Recent activity'}),histList(6))}
@@ -376,37 +453,77 @@ function pieChart(){
   const box=h('div',{id:'pieBox',className:'pie'+(pieAnim?' zin':'')},svg,lg);pieAnim=false;
   return h('div',{},bar,box,pieMode==='users'?h('small',{className:'mu',style:'display:block;margin-top:6px',textContent:'A player flagged for two different words counts once in each.'}):'')}
 
-function renderHist(main){main.append(histList(200))}
+function attention(){
+  if(!loaded)return h('div',{className:'att-row'},...[0,1,2].map(()=>h('div',{className:'att skel'})));
+  const rs=Object.entries(D).map(([k,r])=>({...r,k})),un=rs.filter(r=>markOf(r)==='open'),nt=rs.filter(r=>markOf(r)==='noted'),
+    va=rs.filter(r=>r.status==='valid'&&!r.aiv),ai=rs.filter(r=>r.aiv);
+  const card=(n,cls,label,sub,f)=>h('button',{className:'att '+cls,title:'Show these in A.F.R',onclick:()=>{flt=f;go('afr');paintFlt()}},
+    h('div',{className:'n',textContent:n}),h('b',{textContent:label}),h('small',{textContent:sub}));
+  const cards=[];
+  if(un.length)cards.push(card(un.length,'o','Unchecked',`Oldest came in ${ago(Math.min(...un.map(r=>pushTime(r.k))))}`,{type:'mark',val:'open'}));
+  if(nt.length)cards.push(card(nt.length,'o','Unchecked with notes','Someone left a note on these',{type:'mark',val:'noted'}));
+  if(va.length)cards.push(card(va.length,'v','Valid','Waiting to be resolved',{type:'mark',val:'valid'}));
+  if(ai.length)cards.push(card(ai.length,'y','AI valid','The AI flagged these, check them',{type:'mark',val:'ai'}));
+  return h('div',{className:'att-row'},...(cards.length?cards:[h('div',{className:'att done'},h('div',{className:'n',textContent:'\u2713'}),h('b',{textContent:'All caught up'}),h('small',{textContent:'Nothing is waiting right now.'}))]))}
 
-function histList(n){
+const HACTS=[['all','All'],['resolved','Resolved'],['denied','Denied'],['valid','Valid'],['cleared','Reopened'],['deleted','Deleted']];
+function renderHist(main){
+  const chips=h('div',{className:'seg2'},...HACTS.map(([v,l])=>h('button',{className:hf.a===v?'on':'',textContent:l,onclick:()=>{hf.a=v;render()}})));
+  const q=h('input',{placeholder:'Search player, message or mod',value:hf.q,oninput:e=>{hf.q=e.target.value;paintHist()}});
+  const mine=h('label',{className:'chk'},h('input',{type:'checkbox',checked:hf.mine,onchange:e=>{hf.mine=e.target.checked;paintHist()}}),'Only my actions');
+  main.append(h('div',{className:'hbar'},chips,q,mine),h('div',{id:'hl'}));paintHist()}
+function paintHist(){
+  const box=$('#hl');if(!box)return;const q=hf.q.trim().toLowerCase();
+  box.replaceChildren(histList(200,e=>(hf.a==='all'||e.action===hf.a)&&(!hf.mine||e.by===me.k)&&
+    (!q||[e.displayName,e.username,e.userId,e.text,e.word,e.byName,e.by].join(' ').toLowerCase().includes(q))),
+    h('small',{className:'mu',style:'display:block;margin-top:10px',textContent:'Showing up to the latest 200 actions.'}))}
+
+function histList(n,pred){
   if(hErr)return h('p',{className:'mu',textContent:'Can\u2019t read history. Add the /history rules in Firebase.'});
-  const es=Object.entries(H).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,n);
-  if(!es.length)return h('p',{className:'mu',textContent:'No actions yet.'});
+  const es=Object.entries(H).filter(([,e])=>!pred||pred(e)).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,n);
+  if(!es.length)return h('p',{className:'mu',textContent:pred?'No actions match.':'No actions yet.'});
   return h('div',{className:'list'},...es.map(([k,e])=>{
-    const[ic,l]=ACT[e.action]||['•',String(e.action)];
-    return h('div',{className:'row a-'+e.action},
-      h('span',{className:'ic',textContent:ic}),
-      h('div',{className:'rb'},h('b',{textContent:`${l}: ${e.displayName||e.username||'unknown'} (@${e.username||'?'})${e.byName?' by '+e.byName:''}`}),h('div',{className:'msg',textContent:e.text??''})),
-      h('small',{className:'tm',textContent:e.t?new Date(e.t).toLocaleString():''}))}))}
+    const[ic,l]=ACT[e.action]||['•',String(e.action)],nm=`${e.displayName||e.username||'unknown'} (@${e.username||'?'})`;
+    const line=e.undo?`Undone: ${nm}, back to ${e.action==='valid'?'Valid':'Unchecked'} by ${P[e.undoneBy]?.displayName||e.undoneBy||'someone'}`:`${l}: ${nm}${e.byName?' by '+e.byName:''}`;
+    return h('div',{className:'row a-'+(e.undo?'cleared':e.action)},
+      h('span',{className:'ic',textContent:e.undo?'\u21B6':ic}),
+      h('div',{className:'rb'},h('b',{textContent:line}),h('div',{className:'msg',textContent:e.text??''})),
+      h('small',{className:'tm',textContent:when(e.t),title:e.t?new Date(e.t).toLocaleString():''}))}))}
 
+// Remembers where the players list was scrolled to, so Back lands on the same spot instead of the top
+let gridY=0;
+function openPlayer(id){gridY=window.scrollY;user=id;render();window.scrollTo(0,0)}
+function backToGrid(){user=null;render();restoreGridY()}
+function restoreGridY(){const y=gridY;window.scrollTo(0,y);requestAnimationFrame(()=>window.scrollTo(0,y))}
+const SORTS=[['new','Newest report first'],['wait','Waiting longest'],['open','Most unchecked'],['most','Most reports'],['name','Name A\u2013Z']];
+let sortBy='new';
+function sortPlayers(gs){
+  const un=g=>g.list.filter(r=>!r.status).length,old=g=>g.list.filter(r=>!r.status).map(r=>r.k).sort()[0]||'\uffff';
+  const f={new:(a,b)=>a.list[0].k<b.list[0].k?1:-1,wait:(a,b)=>old(a)<old(b)?-1:old(a)>old(b)?1:0,open:(a,b)=>un(b)-un(a)||(a.list[0].k<b.list[0].k?1:-1),
+    most:(a,b)=>b.list.length-a.list.length||(a.list[0].k<b.list[0].k?1:-1),name:(a,b)=>String(a.name||a.user||'').localeCompare(String(b.name||b.user||''))}[sortBy];
+  return f?[...gs].sort(f):gs}
 function renderAfr(main){
+  if(!loaded){main.append(stBad?h('p',{className:'bad',textContent:'Couldn\u2019t load reports: '+$('#st').textContent}):h('div',{className:'grid'},...Array.from({length:8},()=>h('div',{className:'tile skel'}))));return}
   const gs=groups(true),q=$('#q').value.trim().toLowerCase();
   loadHeads(gs.map(g=>g.id));
   if(!user){
-    const f=gs.filter(g=>[g.name,g.user,g.id].join(' ').toLowerCase().includes(q));
+    const f=sortPlayers(gs.filter(g=>[g.name,g.user,g.id,...g.list.map(r=>r.text)].join(' ').toLowerCase().includes(q)));
     const legend=h('div',{className:'mlg'},...MARKS.map(([m,l])=>h('span',{},dot(m),l)));
     main.append(f.length?h('div',{},legend,h('div',{className:'grid'},...f.map(g=>{const G=userGrad(g.list);
-      return h('button',{className:'tile ut',style:`background:${G.bg}`,title:G.parts.map(([m,x])=>`${MARKS.find(z=>z[0]===m)[1]}: ${G.c[m]} (${Math.round(x*100)}%)`).join('\n'),onclick:()=>{user=g.id;render()}},
+      return h('button',{className:'tile ut',style:`background:${G.bg}`,title:G.parts.map(([m,x])=>`${MARKS.find(z=>z[0]===m)[1]}: ${G.c[m]} (${Math.round(x*100)}%)`).join('\n'),onclick:()=>openPlayer(g.id)},
       h('div',{className:'tl'},head(g.id,44,g.name||g.user),h('div',{className:'tb'},h('b',{textContent:g.name||g.user}),h('small',{textContent:'@'+g.user}),
-      h('small',{textContent:`${g.list.length} report${g.list.length>1?'s':''}: `+G.parts.map(([m])=>`${G.c[m]} ${MARKS.find(z=>z[0]===m)[1].toLowerCase()}`).join(', ')}))))})))
+      h('small',{textContent:`${g.list.length} report${g.list.length>1?'s':''}: `+G.parts.map(([m])=>`${G.c[m]} ${MARKS.find(z=>z[0]===m)[1].toLowerCase()}`).join(', ')}),
+      h('small',{textContent:'Latest '+ago(pushTime(g.list[0].k))}))))})))
       :h('p',{className:'mu',textContent:Object.keys(D).length?'No user matches that search.':'No reports yet. New ones show up here after the scanner uploads them.'}));
   }else{
-    const g=gs.find(x=>x.id===user);if(!g){user=null;return render()}
+    const g=gs.find(x=>x.id===user);if(!g){user=null;render();restoreGridY();return}
     const nv=g.list.filter(r=>r.status==='valid').length,gid=g.id;
     main.append(h('div',{className:'tl',style:'margin-bottom:14px;flex-wrap:wrap'},head(g.id,48,g.name||g.user),h('h2',{style:'margin:0;flex:1',textContent:`${g.name||g.user} (@${g.user})`}),
       nv?h('div',{style:'min-width:300px'},dlPicker(()=>Object.entries(D).filter(([k,r])=>r.status==='valid'&&String(r.userId??r.username)===gid),`valid-reports-${g.user||g.id}`,`⬇ Download all valid (${nv})`)):''),h('div',{className:'grid'},...g.list.map(r=>
       h('button',{className:`tile s-${markOf(r)}${r.k===sel?' sel':''}`,onclick:()=>openSide(r.k)},
-        h('small',{textContent:(r.word?`Flagged: ${r.word}`:'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),h('div',{className:'msg',textContent:r.text})))));
+        h('small',{className:'trow'},h('span',{className:'tlbl',textContent:(r.word?`Flagged: ${r.word}`:'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),
+          h('span',{className:'tm2',textContent:ago(pushTime(r.k)),title:new Date(pushTime(r.k)).toLocaleString()})),
+        h('div',{className:'msg'},hl(r.text,r.word))))));
   }}
 
 function openZoom(src){
@@ -434,7 +551,19 @@ function openZoom(src){
     h('button',{textContent:'✕',title:'Close',onclick:close})),
     h('small',{textContent:'Scroll or pinch to zoom · drag to move · double-click to zoom · Esc to close'}));
   document.body.append(box);addEventListener('keydown',key,true);if(img.complete&&img.naturalWidth)reset()}
-function openSide(k){sel=k;document.body.classList.add('open');render();paintSide()}
+function openSide(k){sel=k;document.body.classList.add('open');render();paintSide();$('#side').scrollTop=0}
+// The reports in the open player's list, in the order shown (falls back to all of their reports)
+function sideList(){
+  const r=D[sel];if(!r)return[];const id=String(r.userId??r.username);
+  for(const ff of[true,false]){const g=groups(ff).find(x=>x.id===id);if(g&&g.list.some(x=>x.k===sel))return g.list.map(x=>x.k)}
+  return[sel]}
+function paintSnav(){
+  const box=$('#side .snav');if(!box||!sel||!D[sel])return;const l=sideList(),i=l.indexOf(sel);
+  box.replaceChildren(...(l.length>1?[
+    h('button',{textContent:'\u2039',title:'Previous report (\u2190)',disabled:i<=0,onclick:()=>stepSide(-1)}),
+    h('small',{textContent:`${i+1} / ${l.length}`}),
+    h('button',{textContent:'\u203A',title:'Next report (\u2192)',disabled:i<0||i>=l.length-1,onclick:()=>stepSide(1)})]:[]))}
+function stepSide(d){const l=sideList(),i=l.indexOf(sel),n=l[i+d];if(i>=0&&n){if(user!==String(D[n].userId??D[n].username))user=String(D[n].userId??D[n].username);openSide(n)}}
 function closeSide(){clearInterval(T);sel=null;document.body.classList.remove('open');$('#side').replaceChildren();render()}
 
 function paintSide(){
@@ -444,7 +573,9 @@ function paintSide(){
   const img=/^(data:image\/|https:\/\/)/.test(src)
     ?h('img',{className:'shot',src,referrerPolicy:'no-referrer',title:'Click to zoom',onclick:()=>openZoom(src),onerror(){this.replaceWith(h('div',{className:'noimg',textContent:'Image failed to load'}))}})
     :h('div',{className:'noimg',textContent:'Loading image...'});
-  const f=(l,v)=>h('div',{className:'f'},h('small',{textContent:l}),h('span',{className:'v',textContent:v??'-'}));
+  const f=(l,v,copy)=>h('div',{className:'f'},h('small',{textContent:l}),h('span',{className:'v',textContent:v??'-'}),
+    copy&&v!=null&&v!==''?h('button',{className:'cp',textContent:'Copy',title:'Copy '+l.toLowerCase(),onclick:()=>copyText(v)}):'');
+  const rt=pushTime(sel),snav=h('div',{className:'snav'});
   const sb=(st,cls,txt,tip)=>h('button',{className:`sb ${cls}${r.status===st?' on':''}`,textContent:txt,title:tip,onclick:()=>setStatus(st)});
   const del=h('button',{className:'del',textContent:'🗑 Delete'}),can=h('button',{textContent:'Cancel',hidden:true});
   const reset=()=>{clearInterval(T);del.disabled=false;del.textContent='🗑 Delete';delete del.dataset.a;can.hidden=true};
@@ -454,15 +585,19 @@ function paintSide(){
     T=setInterval(()=>{if(--n>0){del.textContent=`Wait ${n}...`;return}clearInterval(T);del.disabled=false;del.textContent='⚠ Confirm delete'},1000)};
   can.onclick=reset;
   $('#side').replaceChildren(
-    h('div',{className:'top'},h('div',{className:'tl'},head(r.userId,36,r.displayName),h('b',{textContent:'Report'})),h('button',{textContent:'✕',title:'Close',onclick:closeSide})),
-    img,f('Display name',r.displayName),f('Username',r.username),f('User ID',r.userId),
-    h('div',{className:'f'},h('small',{textContent:'Message'}),h('div',{className:'m',textContent:r.text})),
+    h('div',{className:'top'},h('div',{className:'tl'},head(r.userId,36,r.displayName),h('b',{textContent:'Report'})),snav,h('button',{textContent:'✕',title:'Close (Esc)',onclick:closeSide})),
+    img,f('Reported',rt?`${fmtT(rt)} (${ago(rt)})`:null),f('Display name',r.displayName,true),f('Username',r.username,true),f('User ID',r.userId,true),
+    ...(/^\d+$/.test(String(r.userId))?[h('a',{className:'plink',href:`https://www.roblox.com/users/${r.userId}/profile`,target:'_blank',rel:'noopener noreferrer',textContent:'Open Roblox profile \u2197'})]:[]),
+    h('div',{className:'f'},h('small',{textContent:'Message'+(r.word?` (flagged for \u201C${r.word}\u201D)`:'')}),h('div',{className:'m'},hl(r.text,r.word))),
     ...(r.ai?[h('div',{className:'f'},h('small',{textContent:'AI check'}),h('div',{className:'m',textContent:`${String(r.ai.verdict).toUpperCase()}: ${r.ai.reason||''}`}))]:[]),
     h('div',{className:'f'},h('small',{textContent:'Notes'}),notesBox(sel)),
     h('div',{className:'acts'},sb('resolved','ok','✅ Resolved','Resolved'),sb('denied','no','❌ Denied','Denied'),sb('valid',r.aiv?'va ai':'va','👍 Valid','Valid, can\u2019t act on it now')),
+    h('label',{className:'chk an'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking'),
     h('small',{id:'dl',className:'mu',textContent:pend[sel]?dlText(sel):''}),
     h('div',{className:'acts'},del,can),
-    dlPicker((k=>()=>D[k]?[[k,D[k]]]:[])(sel),`report-${r.username||r.userId}-${sel}`,'⬇ Download report'));
+    dlPicker((k=>()=>D[k]?[[k,D[k]]]:[])(sel),`report-${r.username||r.userId}-${sel}`,'⬇ Download report'),
+    h('small',{className:'keys'},'Shortcuts: ',kbd('V'),' valid  ',kbd('R'),' resolved  ',kbd('D'),' denied  ',kbd('\u2190'),kbd('\u2192'),' previous/next  ',kbd('N'),' note  ',kbd('Esc'),' close'));
+  paintSnav();
   if(!src){const id=sel;
     api('/images/'+id).then(d=>{
       const b=$('#side .noimg');if(sel!==id||!b)return;
@@ -506,10 +641,35 @@ async function loadNotes(k){
 setInterval(()=>{if(sel&&notesFor===sel&&!document.hidden)loadNotes(sel)},5000);
 
 async function setStatus(st){
-  const r=D[sel],k=sel,old=r.status,ai=r.aiv,v=old===st&&!ai?null:st;
+  const k=sel,r=D[k];if(!r)return;
+  const old=r.status,ai=r.aiv,v=old===st&&!ai?null:st;
+  const prev={status:old??null,aiv:ai??null,validBy:r.validBy??null,validByName:r.validByName??null};
+  // Work out the next report before marking, because marking can move this one out of the filtered list
+  const l=sideList(),i=l.indexOf(k),nxt=v?(l[i+1]??(i>0?l[i-1]:null)):null;
   r.status=v;r.aiv=null;render();paintSide();
-  try{await api('/reports/'+k,'PATCH',{status:v,aiv:null,...(v==='valid'?{validBy:me.k,validByName:P[me.k]?.displayName||me.k}:{})});log(v||'cleared',r,k);if(v==='resolved'||v==='denied')schedDel(k);else cancelDel(k);render();if(sel===k)paintSide()}
+  try{
+    const vb=v==='valid'?{validBy:me.k,validByName:P[me.k]?.displayName||me.k}:{};
+    await api('/reports/'+k,'PATCH',{status:v,aiv:null,...vb});Object.assign(r,vb);
+    log(v||'cleared',r,k);if(v==='resolved'||v==='denied')schedDel(k);else cancelDel(k);
+    const who=r.displayName||r.username||'this report',gone=v==='resolved'||v==='denied';
+    toast(v?`${{resolved:'Resolved',denied:'Denied',valid:'Marked valid'}[v]}: ${who}${gone?'. Deleting in 10s.':''}`:`Reopened: ${who}`,
+      {kind:v==='denied'?'bad':v?'ok':'',action:v?'Undo':null,ms:gone?9500:5000,onAction:()=>restoreStatus(k,prev)});
+    if(nxt&&D[nxt]&&autoNext()&&sel===k)openSide(nxt);else{render();if(sel===k)paintSide()}}
   catch(e){r.status=old;r.aiv=ai;render();paintSide();alert(e.message)}}
+// Undo: put the report back exactly as it was, and put History back so stats and Valid credit don't move
+async function restoreStatus(k,prev){
+  const r=D[k];if(!r)return toast('That report was already deleted.',{kind:'bad'});
+  cancelDel(k);
+  try{
+    await api('/reports/'+k,'PATCH',{status:prev.status,aiv:prev.aiv,validBy:prev.validBy,validByName:prev.validByName});
+    Object.assign(r,prev);
+    const lv=Object.entries(H).filter(([,e])=>e.reportId===k&&e.action==='valid').sort((a,b)=>a[0]<b[0]?1:-1)[0]?.[1];
+    const vb=prev.validBy?{by:prev.validBy,byName:prev.validByName||prev.validBy}:lv?{by:lv.by,byName:lv.byName||lv.by}:null;
+    const human=prev.status==='valid'&&!prev.aiv&&vb;
+    await api('/history','POST',{action:human?'valid':'cleared',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,
+      ...(human?vb:{by:me.k,byName:P[me.k]?.displayName??me.k}),undo:true,undoneBy:me.k,t:{'.sv':'timestamp'}});
+    await loadHist();lastStats=0;render();if(sel===k)paintSide();toast('Undone',{kind:'ok',ms:2500})
+  }catch(e){toast(e.message,{kind:'bad'})}}
 async function doDelete(){
   const k=sel,r=D[k];cancelDel(k);
   try{await api('/reports/'+k,'DELETE');delete D[k];api('/images/'+k,'DELETE').catch(()=>{});api('/notes/'+k,'DELETE').catch(()=>{});closeSide();log('deleted',r,k)}catch(e){alert(e.message)}}
@@ -696,6 +856,20 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['3.0.1','2026-10-17',['Back from a player in A.F.R returns you to the same spot in the players list instead of the top (handy on phones)',
+    'Opening a player starts at the top of their reports, and switching tabs starts the new tab at the top']],
+  ['3.0','2026-10-17',['Main menu: Needs attention shows how many reports are unchecked, valid or AI valid. Click a card to jump straight to them',
+    'Reports show how long ago they came in, and the flagged word is highlighted in the message',
+    'Report panel: when it was reported, Copy buttons for display name, username and user ID, and a link to the Roblox profile',
+    'Move between a player\u2019s reports with \u2039 \u203A at the top of the report panel, or turn on Go to the next report after marking',
+    'Keyboard shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next, N note, Esc close. Press / in A.F.R to search',
+    'Undo after marking a report. Resolved and Denied can be undone until they\u2019re deleted 10 seconds later',
+    'Messages now show as small notices at the bottom of the screen instead of pop-ups you have to click away',
+    'New reports: a notice with a View button, the number of open reports in the browser tab title, and an optional sound (Profile settings)',
+    'A.F.R: sort players (newest, waiting longest, most unchecked, most reports, name A\u2013Z), and search also looks inside messages',
+    'History: filter by action, search by player, message or mod, and Only my actions. Undone actions are labelled Undone',
+    'The header shows when the data last updated, Refresh is now a \u27F3 button, placeholders show while reports load, and the header fits small screens',
+    'Fixed: the Resolved button no longer turns green and wraps onto two lines']],
   ['2.7','2026-10-12',['Onboarding: a guided tour of every tab starts on your first sign-in','Replay it any time with the ? button at the top or from Profile settings']],
   ['2.6','2026-10-12',['Flagged words pie chart is now 2.5D','Pie chart filters: All, Validated, Not validated, Resolved, Denied']],
   ['2.5','2026-10-11',['Creator can turn their protection off in Profile settings']],
@@ -737,16 +911,16 @@ function renderLog(main){
 let OB=null;
 const OBS=[
   {v:'home',hl:false,t:()=>`Welcome, ${P[me.k]?.displayName||me.k}!`,b:['This quick tour walks you through every tab and what it’s for.','Use Next and Back (or the arrow keys) to move around. Skip tour ends it.','You can replay it any time with the ? button at the top, or from Profile settings.']},
-  {v:'home',t:'Main menu',b:['Messages from staff (broadcasts) show at the very top.','Your stats: how many reports you’ve resolved, denied and marked valid, today, this month, this year and overall.','Reports overview: how many reports are open, handled, or marked valid by the AI.','Flagged words chart: which words get players flagged most. Switch between Reports and Users, and filter by status.','Recent activity: the latest actions taken by everyone.']},
-  {v:'afr',t:'A.F.R: flagged players',b:['Every player whose chat got flagged gets a tile here. The number on the tab is how many reports are still open.','Each tile is coloured by its reports: the more reports with one status, the more of the tile that colour. The legend above the tiles shows what each colour means.','Find a user searches by name, username or ID. Filter shows only one word, one status, or reports that have notes.','Click a player to see all of their reports.']},
-  {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 10 seconds, so click the same button again to cancel.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).']},
+  {v:'home',t:'Main menu',b:['Messages from staff (broadcasts) show at the very top.','Needs attention: what\u2019s waiting right now. Click a card to jump straight to those reports.','Your stats: how many reports you’ve resolved, denied and marked valid, today, this month, this year and overall.','Reports overview: how many reports are open, handled, or marked valid by the AI.','Flagged words chart: which words get players flagged most. Switch between Reports and Users, and filter by status.','Recent activity: the latest actions taken by everyone.']},
+  {v:'afr',t:'A.F.R: flagged players',b:['Every player whose chat got flagged gets a tile here. The number on the tab is how many reports are still open.','Each tile is coloured by its reports: the more reports with one status, the more of the tile that colour. The legend above the tiles shows what each colour means.','Find a player searches names, usernames, IDs and message text. Sort changes the order, for example Waiting longest. Filter shows only one word, one status, or reports that have notes.','Click a player to see all of their reports.']},
+  {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 10 seconds, so click the same button again to cancel.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).','After you mark a report, a notice at the bottom lets you Undo it.','Shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next report, N write a note, Esc close. Use \u2039 \u203A at the top of the panel to move between reports.']},
   {v:'afr',t:'Notes and downloads',b:['Notes: chat with the other mods about a report. Enter sends, Shift+Enter makes a new line. Paste, drop or 📎 a picture to attach it. You can delete your own notes.','⬇ Download report saves one report as a Zip or as an HTML Report/Arrest Case file.','On a player’s page, Download all valid grabs every valid report for that player.','Reports without a screenshot are left out of downloads.']},
   {v:'afr',t:'Export and Resolve all',b:['Export valid saves every valid report as a zip: a folder per player with the screenshots, plus a Report/Arrest Case file with the charges and total time required.','Resolve all valid marks every valid report as Resolved at once. They get deleted after 10 seconds, with a Cancel button at the top.','Tip: export first if you want to keep a copy.']},
   {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in.','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','The line under the switch tells you whether the AI is online right now.']},
   {v:'launch',t:'Launcher',b:['Launch an account into the game in one click, or tick several and use Launch selected.','Pick bot accounts with the Bots button. Each bot shows whether it’s online, hopping servers or disconnected.','Auto-Call Bot when down relaunches a bot that disconnects or goes quiet for 2 minutes.','Only the Creator and Administrators can add or remove accounts.','Recent launches shows what was launched and whether it worked.']},
   {v:'hist',t:'History',b:['Every action anyone takes on a report: resolved, denied, valid, reopened and deleted.','Each line shows the player, their message, who did it and when.']},
   {v:'all',t:'All profiles',b:['Everyone’s stats side by side, with Creator and Admin tags.','If someone hid their stats, you’ll see nil instead of numbers.']},
-  {v:'prof',t:'Profile settings',b:['Set a profile picture, change your display name or password.','Hide my stats: other mods see nil instead of your numbers.','🧭 Replay onboarding starts this tour again.']},
+  {v:'prof',t:'Profile settings',b:['Set a profile picture, change your display name or password.','Hide my stats: other mods see nil instead of your numbers.','Reviewing: go to the next report automatically after marking one, and play a sound when new reports come in.','🧭 Replay onboarding starts this tour again.']},
   {v:'bc',staff:true,t:'Broadcast',b:['Post a message for everyone. The newest 3 show at the top of the Main menu.','Pick a level: 📢 Announcement, ⚠️ Warning or 🚨 Important.','Remove a broadcast once it’s no longer needed. Administrators can’t remove the Creator’s.']},
   {v:'mod',staff:true,t:'Moderation',b:['⚠ Warn: they get a pop-up they have to accept before carrying on.','👢 Kick: signs them out within seconds.','⛔ Ban: signs them out and keeps them out for 1 hour up to permanently. ✅ Unban lifts it early.','🧹 Clear warnings removes all of their warnings.','The Moderation log lists every action. Administrators can’t act on the Creator.']},
   {v:'log',t:'Changelogs',b:['Every update and what it changed, newest first.']},
@@ -924,6 +1098,10 @@ function renderProf(main){
         const v=!e.target.checked;try{await api('/settings','PATCH',{creatorUnprotected:v});SET.creatorUnprotected=v;render()}catch(er){alert(er.message);e.target.checked=!v}}}),
         h('span',{className:'knob'}),h('span',{textContent:'Protect me from Administrator actions'})),
       h('small',{className:'mu',textContent:'When off, Administrators can act on your profile like anyone else’s.'})]:[]),
+    h('b',{textContent:'Reviewing'}),
+    h('label',{className:'chk'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking one'),
+    h('label',{className:'chk'},h('input',{type:'checkbox',checked:ls('ping')==='1',onchange:e=>{ls('ping',e.target.checked?'1':'0');if(e.target.checked)ping()}}),'Play a sound when new reports come in'),
+    h('small',{className:'mu',textContent:'These are saved in this browser only.'}),
     h('b',{textContent:'Onboarding'}),
     h('button',{textContent:'🧭 Replay onboarding',onclick:startOb}),
     h('button',{textContent:'Sign out',onclick:signout})))}
@@ -1101,8 +1279,19 @@ function pickPfp(f){
 async function patchMe(o){try{await api('/profiles/'+me.k,'PATCH',o);Object.assign(P[me.k],o);render();return true}catch(e){alert(e.message);return false}}
 
 async function load(){
+  if(loading||!me)return;loading=true;const rf=$('#rf');rf.classList.add('spin');
+  try{await loadInner()}finally{loading=false;rf.classList.remove('spin')}}
+async function loadInner(){
   if(!me)return;
-  try{D=await api('/reports')||{};stat('Live')}catch(e){stat(e.message,1);return}
+  try{D=await api('/reports')||{};stat('Live');loaded=true;lastLoad=Date.now()}catch(e){stat(e.message,1);if(!loaded)render();return}
+  {const keys=Object.keys(D);
+    if(seenKeys){const fresh=keys.filter(k=>!seenKeys.has(k)&&!D[k].status);
+      if(fresh.length){
+        toast(`${fresh.length} new report${fresh.length>1?'s':''}`+(fresh.length===1?`: ${D[fresh[0]].displayName||D[fresh[0]].username}`:''),{action:'View',ms:8000,onAction:()=>{
+          flt={type:null,val:null};paintFlt();go('afr');
+          if(fresh.length===1&&D[fresh[0]]){const r=D[fresh[0]];user=String(r.userId??r.username);openSide(fresh[0])}}});
+        if(ls('ping')==='1')ping()}}
+    seenKeys=new Set(keys)}
   try{P=await api('/profiles')||{}}catch{}
   if(guard(P[me.k]))return;
   try{B=await api('/broadcasts')||{}}catch{}
@@ -1116,19 +1305,33 @@ async function load(){
   if(sel&&!D[sel])closeSide();else if(!busy())render()}
 
 $('#rf').onclick=load;$('#obh').onclick=startOb;$('#ex').onclick=exportValid;$('#rv').onclick=resolveAllValid;$('#q').oninput=render;
-$('#back').onclick=()=>{user=null;render()};
+$('#back').onclick=backToGrid;
+sortBy=ls('sort')||'new';$('#sort').append(...SORTS.map(([v,l])=>h('option',{value:v,textContent:l})));$('#sort').value=sortBy;
+$('#sort').onchange=e=>{sortBy=e.target.value;ls('sort',sortBy);render()};
 addEventListener('keydown',e=>{if(e.key==='Escape'&&sel)closeSide()});
+addEventListener('keydown',e=>{
+  if(!me||OB!==null||$('#zm')||$('#wm')||$('#ob')||e.ctrlKey||e.metaKey||e.altKey||e.repeat)return;
+  const a=document.activeElement,typing=!!a&&(/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)||a.isContentEditable);
+  if(typing)return;
+  if(e.key==='/'&&view==='afr'&&!user){e.preventDefault();$('#q').focus();return}
+  if(!sel||!D[sel])return;
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  const act={v:()=>setStatus('valid'),r:()=>setStatus('resolved'),d:()=>setStatus('denied'),
+    ArrowRight:()=>stepSide(1),j:()=>stepSide(1),ArrowLeft:()=>stepSide(-1),k:()=>stepSide(-1),
+    n:()=>$('#side .nin textarea')?.focus()}[k];
+  if(act){e.preventDefault();act()}});
 addEventListener('click',()=>{if(fOpen){fOpen=false;paintFlt()}if(bOpen){bOpen=false;render()}});
 setInterval(()=>{if(!document.hidden)load()},20000);
 setInterval(()=>{if(!document.hidden&&me&&view==='launch')loadLauncher().then(()=>{if(view==='launch'&&!busy())render()})},5000);
-setInterval(()=>{const n=$('#dl');if(n&&pend[sel])n.textContent=dlText(sel);paintCd()},1000);
+setInterval(()=>{const n=$('#dl');if(n&&pend[sel])n.textContent=dlText(sel);paintCd();
+  if(!stBad&&lastLoad&&!loading){const x=Date.now()-lastLoad;$('#st').textContent='Live \u00B7 '+(x<5000?'just now':ago(lastLoad))}},1000);
 function paintCd(){
   const ks=Object.keys(pend),c=$('#cd');if(!c)return;
   if(ks.length<2){c.hidden=true;return}
   const left=Math.max(0,Math.ceil((Math.max(...ks.map(k=>pend[k].at))-Date.now())/1000));
   c.hidden=false;c.replaceChildren(h('small',{className:'bad',textContent:`Deleting ${ks.length} reports in ${left}s `}),
     h('button',{textContent:'Cancel',onclick:()=>{ks.forEach(cancelDel);render()}}));
-  document.querySelectorAll('.tile small').forEach(e=>{e.textContent=e.textContent.replace(/deleting in \d+s/,m=>'deleting in '+left+'s')})}
+  document.querySelectorAll('.tile .tlbl').forEach(e=>{e.textContent=e.textContent.replace(/deleting in \d+s/,m=>'deleting in '+left+'s')})}
 let mode='in';
 const err=t=>{$('#err').textContent=t};
 function setMode(m){mode=m;$('#dn').hidden=m==='in';$('#go').textContent=m==='in'?'Sign in':'Create profile';$('#mk').textContent=m==='in'?'Create profile':'Back to sign in';err('')}
