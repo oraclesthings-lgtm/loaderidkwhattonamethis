@@ -278,6 +278,15 @@ kbd{display:inline-block;min-width:18px;padding:0 5px;margin:0 1px;border:1px so
 header button{padding:7px 10px}
 #st{min-width:0}
 @media(prefers-reduced-motion:reduce){.skel{animation:none}.toast{animation:none}}
+/* ---- 3.1 Banned Reporters ---- */
+.rid{display:flex;align-items:center;gap:4px;margin-top:2px;flex-wrap:wrap}
+.rid code{font:600 13px/1.3 ui-monospace,Consolas,monospace;background:#0e1420;border:1px solid var(--line);border-radius:4px;padding:1px 6px;user-select:all}
+.rp b{font-weight:600}
+.tag.on{background:#1f9d55;color:#fff}
+.bform{display:grid;gap:8px;margin-top:8px;padding:10px;border:1px solid #7a3434;border-radius:8px;background:#1e1214}
+.bform input:not([type=checkbox]){width:100%}
+.blk{margin-top:8px;width:100%}
+.pc.blocked{border-color:#7a3434;background:linear-gradient(145deg,#2a1519,#0e1420)}
 </style>
 </head>
 <body>
@@ -316,10 +325,10 @@ const DB=window.__CFG?.db;
 if(!DB){document.body.textContent='Open the dashboard through mod-reports-loader.html.';throw new Error('no config')}
 const $=s=>document.querySelector(s);
 const h=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);e.append(...k);return e};
-let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={},B={},W={},ML={},modErr='',modOpen=null,loading=false,loaded=false,lastLoad=0,stBad=false,seenKeys=null,hf={a:'all',mine:false,q:''};
+let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={},B={},W={},ML={},modErr='',modOpen=null,loading=false,loaded=false,lastLoad=0,stBad=false,seenKeys=null,hf={a:'all',mine:false,q:''},RPT={},BRP={},BRL={},brOpen=null,brq='',rptErr='';
 
-const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation'};
-const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed']];
+const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',brep:'Banned Reporters',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation'};
+const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['brep','Banned Reporters','Scanners blocked from reporting'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed']];
 // Tabs only the Creator and Administrators can see or open
 const STAFF=new Set(['bc','mod']);
 const ACT={resolved:['✅','Resolved'],denied:['❌','Denied'],valid:['👍','Marked valid'],cleared:['↩️','Reopened'],deleted:['🗑','Deleted']};
@@ -365,7 +374,7 @@ async function loadHist(){
   try{H=await api('/history','GET',undefined,'orderBy=%22%24key%22&limitToLast=200')||{};hErr=false}catch{hErr=true}}
 async function log(action,r,k){
   try{
-    await api('/history','POST',{action,reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,by:me.k,byName:P[me.k]?.displayName??me.k,t:{'.sv':'timestamp'}});
+    await api('/history','POST',{action,reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,...rFields(r),by:me.k,byName:P[me.k]?.displayName??me.k,t:{'.sv':'timestamp'}});
     await loadHist();render()
   }catch{}}
 
@@ -375,14 +384,15 @@ function groups(ff){
   return Object.entries(m).map(([id,list])=>{list.sort((a,b)=>a.k<b.k?1:-1);return{id,list,name:list[0].displayName,user:list[0].username}})
     .sort((a,b)=>a.list[0].k<b.list[0].k?1:-1)}
 
-function go(v){const fromPlayer=view==='afr'&&v==='afr'&&user!=null;view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(fromPlayer)restoreGridY();else window.scrollTo(0,0);if(st)loadStats().then(render);if(v==='mod')loadMod().then(render);if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
+function go(v){const fromPlayer=view==='afr'&&v==='afr'&&user!=null;view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(fromPlayer)restoreGridY();else window.scrollTo(0,0);if(st)loadStats().then(render);if(v==='mod')loadMod().then(render);if(v==='brep'){brOpen=null;Promise.all([loadReporters(),loadBrep()]).then(render)}if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
 function paintNav(){
   const open=Object.values(D).filter(r=>!r.status).length;
   document.title=open?`(${open}) Mod Reports`:'Mod Reports';
   $('#nav').replaceChildren(h('div',{className:'brand',textContent:'Mod Reports'}),
     ...NAV.filter(([id])=>!STAFF.has(id)||canManage()).map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':'')+(obHl()===id?' ob':''),onclick:()=>go(id)},
       h('b',{textContent:t}),h('small',{textContent:s}),
-      ...(id==='afr'&&open?[h('span',{className:'bd',textContent:open})]:[]))),
+      ...(id==='afr'&&open?[h('span',{className:'bd',textContent:open})]:[]),
+      ...(id==='brep'&&Object.keys(BRP).length?[h('span',{className:'bd',title:'Blocked reporters',textContent:Object.keys(BRP).length})]:[]))),
     h('div',{className:'me'},av(P[me.k],34),h('b',{textContent:P[me.k]?.displayName||me.k},roleTag(me.k)),h('button',{textContent:'Sign out',onclick:signout})))}
 
 function render(){
@@ -394,7 +404,7 @@ function render(){
   $('#q').hidden=!(view==='afr'&&!user);
   $('#sort').hidden=!(view==='afr'&&!user);
   $('#ex').hidden=view!=='afr';{const n=Object.values(D).filter(r=>r.status==='valid').length;$('#rv').hidden=view!=='afr';$('#rv').disabled=!n;$('#rv').textContent=`✅ Resolve all valid (${n})`}$('#fw').hidden=view!=='afr';$('#ex').textContent=`Export valid (${Object.values(D).filter(r=>r.status==='valid').length})`;
-  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod}[view])(main);
+  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod,brep:renderBrep}[view])(main);
   paintSnav()}
 
 function renderHome(main){
@@ -521,7 +531,7 @@ function renderAfr(main){
     main.append(h('div',{className:'tl',style:'margin-bottom:14px;flex-wrap:wrap'},head(g.id,48,g.name||g.user),h('h2',{style:'margin:0;flex:1',textContent:`${g.name||g.user} (@${g.user})`}),
       nv?h('div',{style:'min-width:300px'},dlPicker(()=>Object.entries(D).filter(([k,r])=>r.status==='valid'&&String(r.userId??r.username)===gid),`valid-reports-${g.user||g.id}`,`⬇ Download all valid (${nv})`)):''),h('div',{className:'grid'},...g.list.map(r=>
       h('button',{className:`tile s-${markOf(r)}${r.k===sel?' sel':''}`,onclick:()=>openSide(r.k)},
-        h('small',{className:'trow'},h('span',{className:'tlbl',textContent:(r.word?`Flagged: ${r.word}`:'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),
+        h('small',{className:'trow'},h('span',{className:'tlbl',textContent:(r.word?`Flagged: ${r.word}`:'')+(isBlocked(ridOf(r))?' · 🚫 blocked reporter':'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),
           h('span',{className:'tm2',textContent:ago(pushTime(r.k)),title:new Date(pushTime(r.k)).toLocaleString()})),
         h('div',{className:'msg'},hl(r.text,r.word))))));
   }}
@@ -590,6 +600,7 @@ function paintSide(){
     ...(/^\d+$/.test(String(r.userId))?[h('a',{className:'plink',href:`https://www.roblox.com/users/${r.userId}/profile`,target:'_blank',rel:'noopener noreferrer',textContent:'Open Roblox profile \u2197'})]:[]),
     h('div',{className:'f'},h('small',{textContent:'Message'+(r.word?` (flagged for \u201C${r.word}\u201D)`:'')}),h('div',{className:'m'},hl(r.text,r.word))),
     ...(r.ai?[h('div',{className:'f'},h('small',{textContent:'AI check'}),h('div',{className:'m',textContent:`${String(r.ai.verdict).toUpperCase()}: ${r.ai.reason||''}`}))]:[]),
+    sentBy(r),
     h('div',{className:'f'},h('small',{textContent:'Notes'}),notesBox(sel)),
     h('div',{className:'acts'},sb('resolved','ok','✅ Resolved','Resolved'),sb('denied','no','❌ Denied','Denied'),sb('valid',r.aiv?'va ai':'va','👍 Valid','Valid, can\u2019t act on it now')),
     h('label',{className:'chk an'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking'),
@@ -666,7 +677,7 @@ async function restoreStatus(k,prev){
     const lv=Object.entries(H).filter(([,e])=>e.reportId===k&&e.action==='valid').sort((a,b)=>a[0]<b[0]?1:-1)[0]?.[1];
     const vb=prev.validBy?{by:prev.validBy,byName:prev.validByName||prev.validBy}:lv?{by:lv.by,byName:lv.byName||lv.by}:null;
     const human=prev.status==='valid'&&!prev.aiv&&vb;
-    await api('/history','POST',{action:human?'valid':'cleared',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,
+    await api('/history','POST',{action:human?'valid':'cleared',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,...rFields(r),
       ...(human?vb:{by:me.k,byName:P[me.k]?.displayName??me.k}),undo:true,undoneBy:me.k,t:{'.sv':'timestamp'}});
     await loadHist();lastStats=0;render();if(sel===k)paintSide();toast('Undone',{kind:'ok',ms:2500})
   }catch(e){toast(e.message,{kind:'bad'})}}
@@ -856,6 +867,12 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['3.1','2026-10-19',['Block this reporter: the report panel shows which scanner sent the report (name, ID, bot account, how its earlier reports ended up) with a \uD83D\uDEAB Block button',
+    'Blocking can also delete that scanner\u2019s unchecked reports in one go',
+    'New Banned Reporters tab: every blocked scanner with who blocked it, why, and the report it was blocked over. Unban puts it back',
+    'All reporters list: every scanner that has checked in, online or last seen, reports sent, and a Mostly denied tag for ones whose reports keep getting denied',
+    'Each scanner has its own ID made from its computer, so you unban exactly the right one. Blocks and unbans show in the Block log and the Moderation log',
+    'Reports from a blocked scanner are marked in the player\u2019s report list']],
   ['3.0.1','2026-10-17',['Back from a player in A.F.R returns you to the same spot in the players list instead of the top (handy on phones)',
     'Opening a player starts at the top of their reports, and switching tabs starts the new tab at the top']],
   ['3.0','2026-10-17',['Main menu: Needs attention shows how many reports are unchecked, valid or AI valid. Click a card to jump straight to them',
@@ -919,6 +936,7 @@ const OBS=[
   {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in.','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','The line under the switch tells you whether the AI is online right now.']},
   {v:'launch',t:'Launcher',b:['Launch an account into the game in one click, or tick several and use Launch selected.','Pick bot accounts with the Bots button. Each bot shows whether it’s online, hopping servers or disconnected.','Auto-Call Bot when down relaunches a bot that disconnects or goes quiet for 2 minutes.','Only the Creator and Administrators can add or remove accounts.','Recent launches shows what was launched and whether it worked.']},
   {v:'hist',t:'History',b:['Every action anyone takes on a report: resolved, denied, valid, reopened and deleted.','Each line shows the player, their message, who did it and when.']},
+  {v:'brep',t:'Banned Reporters',b:['Reporters are the scanners that send reports in. Each has its own ID from the computer it runs on.','Block a scanner that sends false reports from the report panel (\uD83D\uDEAB Block this reporter) or from here. Only that scanner stops.','Check the ID before you press Unban so you unban the right one.']},
   {v:'all',t:'All profiles',b:['Everyone’s stats side by side, with Creator and Admin tags.','If someone hid their stats, you’ll see nil instead of numbers.']},
   {v:'prof',t:'Profile settings',b:['Set a profile picture, change your display name or password.','Hide my stats: other mods see nil instead of your numbers.','Reviewing: go to the next report automatically after marking one, and play a sound when new reports come in.','🧭 Replay onboarding starts this tour again.']},
   {v:'bc',staff:true,t:'Broadcast',b:['Post a message for everyone. The newest 3 show at the top of the Main menu.','Pick a level: 📢 Announcement, ⚠️ Warning or 🚨 Important.','Remove a broadcast once it’s no longer needed. Administrators can’t remove the Creator’s.']},
@@ -988,7 +1006,7 @@ const banUntil=b=>b.until?'until '+new Date(b.until).toLocaleString():'permanent
 const banMsg=b=>`You are banned ${banUntil(b)}${b.byName?' by '+b.byName:''}.${b.reason?' Reason: '+b.reason:''}`;
 const kickMsg=x=>`You were kicked${x?.byName?' by '+x.byName:''}.${x?.reason?' Reason: '+x.reason:''}`;
 const BANS=[[36e5,'1 hour'],[864e5,'1 day'],[2592e5,'3 days'],[6048e5,'7 days'],[2592e6,'30 days'],[0,'Permanent']];
-const MLA={warn:['⚠️','Warned'],kick:['👢','Kicked'],ban:['⛔','Banned'],unban:['✅','Unbanned'],clearw:['🧹','Cleared warnings of']};
+const MLA={warn:['⚠️','Warned'],kick:['👢','Kicked'],ban:['⛔','Banned'],unban:['✅','Unbanned'],clearw:['🧹','Cleared warnings of'],rblock:['🚫','Blocked reporter'],runblock:['✅','Unbanned reporter']};
 async function loadMod(){
   try{const[w,l]=await Promise.all([api('/warns'),api('/modlog','GET',undefined,'orderBy=%22%24key%22&limitToLast=30')]);W=w||{};ML=l||{};modErr=''}
   catch(e){modErr=e.message}}
@@ -1030,7 +1048,9 @@ function modLog(){
   if(modErr)return h('p',{className:'bad',textContent:modErr+'. Add the /warns and /modlog rules in Firebase.'});
   const es=Object.entries(ML).sort((a,b)=>a[0]<b[0]?1:-1);
   if(!es.length)return h('p',{className:'mu',textContent:'No moderation actions yet.'});
-  const cls={ban:'denied',warn:'ai',kick:'cleared',unban:'resolved',clearw:'valid'};
+  return mlList(es)}
+function mlList(es){
+  const cls={ban:'denied',warn:'ai',kick:'cleared',unban:'resolved',clearw:'valid',rblock:'denied',runblock:'resolved'};
   return h('div',{className:'list'},...es.map(([,e])=>{const[ic,l]=MLA[e.action]||['•',String(e.action)];
     return h('div',{className:'row a-'+(cls[e.action]||'')},h('span',{className:'ic',textContent:ic}),
       h('div',{className:'rb'},h('b',{textContent:`${l} ${e.targetName||e.target} by ${e.byName||e.by}`+(e.action==='ban'?' '+banUntil(e):'')}),
@@ -1041,6 +1061,143 @@ function renderMod(main){
   main.append(h('p',{className:'mu',style:'margin-top:0',textContent:'Warn, kick or ban profiles. A ban also kicks them right away. Administrators can’t act on the Creator.'}),
     h('div',{className:'list'},...ps.map(([k,p])=>modRow(k,p))),
     h('h2',{className:'sec',textContent:'Moderation log'}),modLog())}
+
+// ---------- Reporters: the scanners that send reports in ----------
+// The OCR scanner sends a reporter ID with each report, made from the computer's network card (MAC) and name.
+// Only a scrambled hash is stored, never the MAC itself. Blocking an ID stops that scanner's new reports
+// (the database rules reject them too) without touching the other scanners.
+const ridOf=r=>r&&typeof r.reporter==='string'&&/^[\w-]{4,40}$/.test(r.reporter)?r.reporter:null;
+const isBlocked=rid=>!!(rid&&BRP[rid]);
+const rFields=r=>({reporter:ridOf(r),reporterName:r?.reporterName??null});
+const rOnline=x=>!!x?.seen&&Date.now()-x.seen<60000;
+async function loadReporters(){
+  rptErr='';
+  try{BRP=await api('/blockedReporters')||{}}catch(e){rptErr=e.message}
+  try{RPT=await api('/reporters')||{}}catch(e){rptErr=e.message}}
+async function loadBrep(){
+  try{const l=await api('/modlog','GET',undefined,'orderBy=%22%24key%22&limitToLast=100')||{};
+    BRL=Object.fromEntries(Object.entries(l).filter(([,e])=>e&&(e.action==='rblock'||e.action==='runblock')))}catch{}
+  if(Date.now()-lastStats>60000)await loadStats()}
+// How each reporter's reports ended up (last action per report), from the full history
+function rRecord(){
+  const last={},all={...HA,...H};
+  for(const id of Object.keys(all).sort()){const e=all[id];if(e&&e.reporter&&e.reportId)last[e.reportId]=e}
+  const out={};
+  for(const e of Object.values(last)){const o=out[e.reporter]??={resolved:0,denied:0,valid:0,deleted:0};if(e.action in o)o[e.action]++}
+  return out}
+const recText=c=>c?[['resolved','resolved'],['valid','valid'],['denied','denied'],['deleted','deleted']].filter(([k])=>c[k]).map(([k,l])=>`${c[k]} ${l}`).join(', '):'';
+// Everything known about one reporter
+function rInfo(rid){
+  const x=RPT[rid]||{},b=BRP[rid]||{};
+  const mine=Object.entries(D).filter(([,r])=>ridOf(r)===rid).sort((a,c)=>a[0]<c[0]?1:-1),lr=mine[0]?.[1];
+  const pick=sel&&D[sel]&&ridOf(D[sel])===rid?[sel,D[sel]]:mine[0];
+  return{rid,name:x.name||lr?.reporterName||b.name||'Unknown scanner',
+    bot:x.bot||b.bot||null,seen:x.seen||null,sent:x.sent||0,open:mine.filter(([,r])=>!r.status),inDb:mine.length,
+    sample:pick?{report:pick[0],text:pick[1].text??null,word:pick[1].word??null,username:pick[1].username??null,displayName:pick[1].displayName??null}:null}}
+function ridLine(rid){
+  return h('div',{className:'rid'},h('small',{className:'mu',textContent:'ID '}),h('code',{textContent:rid}),
+    h('button',{className:'cp',textContent:'Copy',title:'Copy reporter ID',onclick:()=>copyText(rid)}))}
+// Reason + "also delete" + Block, used in the report panel and on the Banned Reporters tab
+function blockForm(rid,after){
+  const i=rInfo(rid),n=i.open.length;
+  const rs=h('input',{placeholder:'Reason (for example: sends false reports)',maxLength:300});
+  const del=h('input',{type:'checkbox'});
+  const ok=h('button',{className:'del',textContent:'🚫 Block'});
+  del.onchange=()=>{ok.textContent=del.checked?`🚫 Block and delete ${n} report${n>1?'s':''}`:'🚫 Block'};
+  ok.onclick=async()=>{ok.disabled=true;await blockReporter(rid,rs.value.trim(),del.checked);ok.disabled=false};
+  rs.onkeydown=e=>{if(e.key==='Enter')ok.click()};
+  setTimeout(()=>rs.focus());
+  return h('div',{className:'bform'},
+    h('small',{className:'mu',textContent:`Blocks ${i.name} (ID ${rid}) from sending reports. Other scanners keep working. You can unban it on the Banned Reporters tab.`}),
+    rs,...(n?[h('label',{className:'chk'},del,`Also delete its ${n} unchecked report${n>1?'s':''}`)]:[]),
+    h('div',{className:'mform'},ok,h('button',{textContent:'Cancel',onclick:()=>{brOpen=null;after()}})))}
+async function blockReporter(rid,reason,delOpen){
+  const i=rInfo(rid),by={by:me.k,byName:P[me.k]?.displayName||me.k},ts={'.sv':'timestamp'};
+  try{
+    const rec={name:i.name,bot:i.bot,reason:reason||null,...by,at:ts,sample:i.sample};
+    await api('/blockedReporters/'+rid,'PUT',rec);
+    BRP[rid]={...rec,at:Date.now()};
+    api('/modlog','POST',{action:'rblock',target:rid,targetName:`${i.name} (${rid})`,reason:reason||null,...by,t:ts}).catch(()=>{});
+    let n=0;
+    if(delOpen)for(const[k,r]of i.open){
+      try{await api('/reports/'+k,'DELETE');cancelDel(k);delete D[k];n++;
+        api('/images/'+k,'DELETE').catch(()=>{});api('/notes/'+k,'DELETE').catch(()=>{});
+        api('/history','POST',{action:'deleted',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,
+          ...rFields(r),why:'Reporter blocked',...by,t:ts}).catch(()=>{})}catch{}}
+    brOpen=null;
+    toast(`Blocked ${i.name}. Its new reports won’t come in`+(n?`, and ${n} unchecked report${n>1?'s were':' was'} deleted.`:'.'),{kind:'ok'});
+    await Promise.all([loadReporters(),view==='brep'?loadBrep():null]);if(n)await loadHist();
+    if(sel&&!D[sel])closeSide();else{render();if(sel)paintSide()}
+  }catch(e){alert(e.message)}}
+async function unblockReporter(rid){
+  const i=rInfo(rid);
+  if(!confirm(`Unban ${i.name} (ID ${rid})?\n\nIts reports will come in again.`))return;
+  const by={by:me.k,byName:P[me.k]?.displayName||me.k};
+  try{
+    await api('/blockedReporters/'+rid,'DELETE');delete BRP[rid];
+    api('/modlog','POST',{action:'runblock',target:rid,targetName:`${i.name} (${rid})`,...by,t:{'.sv':'timestamp'}}).catch(()=>{});
+    toast(`Unbanned ${i.name}`,{kind:'ok'});
+    await Promise.all([loadReporters(),view==='brep'?loadBrep():null]);render();if(sel)paintSide()
+  }catch(e){alert(e.message)}}
+// "Sent by" in the report panel
+function sentBy(r){
+  const rid=ridOf(r);
+  if(!rid)return h('div',{className:'f'},h('small',{textContent:'Sent by'}),h('span',{className:'mu',textContent:'Unknown (sent before reporter IDs were added)'}));
+  const i=rInfo(rid),b=BRP[rid],rec=recText(rRecord()[rid]),x=RPT[rid];
+  const again=()=>{if(sel)paintSide()};
+  return h('div',{className:'f rp'},h('small',{textContent:'Sent by'}),
+    h('div',{},h('b',{textContent:i.name}),...(b?[h('span',{className:'tag ban',textContent:'Blocked'})]:[]),
+      ...(rOnline(x)?[h('span',{className:'tag on',textContent:'Online'})]:[])),
+    ridLine(rid),
+    ...(i.bot?[h('small',{className:'mu',textContent:'Bot account: '+i.bot})]:[]),
+    ...(rec?[h('small',{className:'mu',textContent:'Its handled reports: '+rec})]:[]),
+    b?h('div',{className:'mform',style:'margin-top:6px'},h('small',{className:'bad',textContent:`Blocked by ${b.byName||b.by}${b.reason?': '+b.reason:''}`}),
+        h('button',{textContent:'Open Banned Reporters',onclick:()=>go('brep')}))
+      :brOpen===rid?blockForm(rid,again)
+      :h('button',{className:'del blk',textContent:'🚫 Block this reporter',title:'Stop this scanner from sending reports',onclick:()=>{brOpen=rid;again()}}))}
+// One reporter on the Banned Reporters tab
+function reporterCard(i,rec){
+  const b=BRP[i.rid],x=RPT[i.rid],rc=rec[i.rid],handled=rc?rc.resolved+rc.denied+rc.valid:0;
+  const lots=rc&&handled>=5&&rc.denied/handled>=0.5;
+  const lines=[
+    i.bot&&'Bot account: '+i.bot,
+    (x?.seen?(rOnline(x)?'Online now':'Last seen '+when(x.seen)):'Never checked in')+(i.sent?` · sent ${i.sent} report${i.sent>1?'s':''}`:''),
+    (i.open.length?`${i.open.length} unchecked report${i.open.length>1?'s':''} waiting`:'')+(rc&&recText(rc)?(i.open.length?' · ':'')+'Handled: '+recText(rc):''),
+  ].filter(Boolean);
+  const box=h('div',{className:'pc mrow'+(b?' blocked':'')},
+    h('div',{className:'mh'},av({displayName:i.name},40),h('div',{className:'rb'},
+      h('b',{textContent:i.name},...(b?[h('span',{className:'tag ban',textContent:'Blocked'})]:[]),...(rOnline(x)&&!b?[h('span',{className:'tag on',textContent:'Online'})]:[]),
+        ...(lots?[h('span',{className:'tag wn',title:'Half or more of its handled reports were denied',textContent:'Mostly denied'})]:[])),
+      ridLine(i.rid)),
+      h('div',{className:'mact'},b?h('button',{textContent:'✅ Unban',onclick:()=>unblockReporter(i.rid)})
+        :h('button',{className:brOpen===i.rid?'on':'',textContent:'🚫 Block',onclick:()=>{brOpen=brOpen===i.rid?null:i.rid;render()}}))),
+    ...lines.map(t=>h('small',{className:'mu',textContent:t})));
+  if(b){
+    box.append(h('small',{textContent:`Blocked by ${b.byName||b.by}${b.at?' · '+new Date(b.at).toLocaleString():''}`}),
+      ...(b.reason?[h('div',{className:'m',textContent:'Reason: '+b.reason})]:[]),
+      ...(b.sample?.text?[h('small',{className:'mu',textContent:`Report it was blocked over: ${b.sample.displayName||b.sample.username||'?'} (@${b.sample.username||'?'})${b.sample.word?', flagged for “'+b.sample.word+'”':''}`}),
+        h('div',{className:'m'},hl(b.sample.text,b.sample.word))]:[]))}
+  else if(brOpen===i.rid)box.append(blockForm(i.rid,render));
+  return box}
+function renderBrep(main){
+  const ids=new Set([...Object.keys(RPT),...Object.keys(BRP),...Object.values(D).map(ridOf).filter(Boolean)]);
+  const rec=rRecord(),q=brq.trim().toLowerCase();
+  const all=[...ids].map(rInfo).filter(i=>!q||[i.name,i.rid,i.bot,BRP[i.rid]?.reason,BRP[i.rid]?.byName].join(' ').toLowerCase().includes(q));
+  const bl=all.filter(i=>BRP[i.rid]).sort((a,b)=>(BRP[b.rid].at||0)-(BRP[a.rid].at||0));
+  const ok=all.filter(i=>!BRP[i.rid]).sort((a,b)=>(RPT[b.rid]?.seen||0)-(RPT[a.rid]?.seen||0)||a.name.localeCompare(b.name));
+  const search=h('input',{placeholder:'Search name, ID, bot account or reason',value:brq,oninput:e=>{brq=e.target.value;const p=e.target.selectionStart;render();const n=$('#brq');if(n){n.focus();n.setSelectionRange(p,p)}}});
+  search.id='brq';
+  const log=Object.entries(BRL).sort((a,b)=>a[0]<b[0]?1:-1);
+  main.append(
+    h('p',{className:'mu',style:'margin-top:0;max-width:760px',textContent:'Reporters are the scanners that send reports in. Each one has its own ID, made from the computer it runs on, and the scanner prints it when it starts. Block one that sends false reports and only that scanner stops: its new reports are refused. Check the ID before you unban, so you unban the right one.'}),
+    ...(rptErr?[h('p',{className:'bad',textContent:rptErr+'. Add the /reporters and /blockedReporters rules in Firebase.'})]:[]),
+    h('div',{className:'hbar'},search),
+    h('h2',{textContent:`Banned reporters (${bl.length})`}),
+    bl.length?h('div',{className:'list',style:'max-width:820px'},...bl.map(i=>reporterCard(i,rec))):h('p',{className:'mu',textContent:q?'No banned reporter matches.':'Nobody is banned. Use 🚫 Block this reporter in a report, or Block below.'}),
+    h('h2',{className:'sec',textContent:`All reporters (${ok.length})`}),
+    ok.length?h('div',{className:'list',style:'max-width:820px'},...ok.map(i=>reporterCard(i,rec))):h('p',{className:'mu',textContent:q?'No reporter matches.':'No scanners have checked in yet. Update the scanners so they send their reporter ID.'}),
+    h('h2',{className:'sec',textContent:'Block log'}),
+    log.length?mlList(log):h('p',{className:'mu',textContent:'No blocks yet.'}))}
 
 // Checks the signed-in profile: kicked or banned users get signed out
 function guard(rec){
@@ -1120,7 +1277,7 @@ async function resolveAllValid(){
   for(const k of vs)schedDel(k);
   render();if(sel&&vs.includes(sel))paintSide();
   await Promise.all(vs.map(k=>{const r=D[k]||{};
-    return api('/history','POST',{action:'resolved',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,by:me.k,byName:P[me.k]?.displayName??me.k,bulk:true,t:{'.sv':'timestamp'}}).catch(()=>{})}));
+    return api('/history','POST',{action:'resolved',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,...rFields(r),by:me.k,byName:P[me.k]?.displayName??me.k,bulk:true,t:{'.sv':'timestamp'}}).catch(()=>{})}));
   await loadHist();lastStats=0;render()}
 function schedDel(k){
   cancelDel(k);
@@ -1295,7 +1452,9 @@ async function loadInner(){
   try{P=await api('/profiles')||{}}catch{}
   if(guard(P[me.k]))return;
   try{B=await api('/broadcasts')||{}}catch{}
+  await loadReporters();
   if(view==='mod')await loadMod();
+  if(view==='brep')await loadBrep();
   checkWarns();
   try{SET=await api('/settings')||{}}catch{}
   try{NOTED=new Set(Object.keys(await api('/notes','GET',undefined,'shallow=true')||{}))}catch{}
