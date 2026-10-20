@@ -283,6 +283,16 @@ header button{padding:7px 10px}
 .rid code{font:600 13px/1.3 ui-monospace,Consolas,monospace;background:#0e1420;border:1px solid var(--line);border-radius:4px;padding:1px 6px;user-select:all}
 .rp b{font-weight:600}
 .tag.on{background:#1f9d55;color:#fff}
+/* ---- 3.2 Username colour check ---- */
+.cc{margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#0e1420;display:grid;gap:8px}
+.cc .ex{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cc .sw2{width:22px;height:22px;border-radius:5px;border:1px solid #ffffff40;flex:none}
+.cc .chat{background:#000a;border-radius:4px;padding:4px 8px;font-weight:700;text-shadow:0 1px 1px #000}
+.cc .cb{display:flex;gap:8px;flex-wrap:wrap}
+.cc .cb button{flex:1 1 40%}
+.cc .cb button.on.ok{background:linear-gradient(135deg,#23a85e,#146b3b);border-color:#37c978}
+.cc .cb button.on.no{background:linear-gradient(135deg,#d24848,#8f2626);border-color:#e25b5b}
+.cc.need{border-color:#f0c04088}
 .bform{display:grid;gap:8px;margin-top:8px;padding:10px;border:1px solid #7a3434;border-radius:8px;background:#1e1214}
 .bform input:not([type=checkbox]){width:100%}
 .blk{margin-top:8px;width:100%}
@@ -327,10 +337,12 @@ const $=s=>document.querySelector(s);
 const h=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);e.append(...k);return e};
 let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={},B={},W={},ML={},modErr='',modOpen=null,loading=false,loaded=false,lastLoad=0,stBad=false,seenKeys=null,hf={a:'all',mine:false,q:''},RPT={},BRP={},BRL={},brOpen=null,brq='',rptErr='';
 
-const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',brep:'Banned Reporters',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation'};
-const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['brep','Banned Reporters','Scanners blocked from reporting'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed']];
+const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',brep:'Banned Reporters',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation',dbg:'Debug'};
+const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['brep','Banned Reporters','Scanners blocked from reporting'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed'],['dbg','Debug','Creator only: test reports']];
 // Tabs only the Creator and Administrators can see or open
 const STAFF=new Set(['bc','mod']);
+// Tabs only the Creator can see or open
+const CREATOR_ONLY=new Set(['dbg']);
 const ACT={resolved:['✅','Resolved'],denied:['❌','Denied'],valid:['👍','Marked valid'],cleared:['↩️','Reopened'],deleted:['🗑','Deleted']};
 
 async function api(path,method='GET',body,qs){
@@ -389,7 +401,7 @@ function paintNav(){
   const open=Object.values(D).filter(r=>!r.status).length;
   document.title=open?`(${open}) Mod Reports`:'Mod Reports';
   $('#nav').replaceChildren(h('div',{className:'brand',textContent:'Mod Reports'}),
-    ...NAV.filter(([id])=>!STAFF.has(id)||canManage()).map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':'')+(obHl()===id?' ob':''),onclick:()=>go(id)},
+    ...NAV.filter(([id])=>(!STAFF.has(id)||canManage())&&(!CREATOR_ONLY.has(id)||isCreator(me.k))).map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':'')+(obHl()===id?' ob':''),onclick:()=>go(id)},
       h('b',{textContent:t}),h('small',{textContent:s}),
       ...(id==='afr'&&open?[h('span',{className:'bd',textContent:open})]:[]),
       ...(id==='brep'&&Object.keys(BRP).length?[h('span',{className:'bd',title:'Blocked reporters',textContent:Object.keys(BRP).length})]:[]))),
@@ -397,6 +409,7 @@ function paintNav(){
 
 function render(){
   if(STAFF.has(view)&&!canManage())view='home';
+  if(CREATOR_ONLY.has(view)&&!isCreator(me.k))view='home';
   paintNav();
   const main=$('#main');main.replaceChildren();
   $('#title').textContent=TITLE[view];
@@ -404,7 +417,7 @@ function render(){
   $('#q').hidden=!(view==='afr'&&!user);
   $('#sort').hidden=!(view==='afr'&&!user);
   $('#ex').hidden=view!=='afr';{const n=Object.values(D).filter(r=>r.status==='valid').length;$('#rv').hidden=view!=='afr';$('#rv').disabled=!n;$('#rv').textContent=`✅ Resolve all valid (${n})`}$('#fw').hidden=view!=='afr';$('#ex').textContent=`Export valid (${Object.values(D).filter(r=>r.status==='valid').length})`;
-  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod,brep:renderBrep}[view])(main);
+  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod,brep:renderBrep,dbg:renderDbg}[view])(main);
   paintSnav()}
 
 function renderHome(main){
@@ -602,12 +615,14 @@ function paintSide(){
     ...(r.ai?[h('div',{className:'f'},h('small',{textContent:'AI check'}),h('div',{className:'m',textContent:`${String(r.ai.verdict).toUpperCase()}: ${r.ai.reason||''}`}))]:[]),
     sentBy(r),
     h('div',{className:'f'},h('small',{textContent:'Notes'}),notesBox(sel)),
-    h('div',{className:'acts'},sb('resolved','ok','✅ Resolved','Resolved'),sb('denied','no','❌ Denied','Denied'),sb('valid',r.aiv?'va ai':'va','👍 Valid','Valid, can\u2019t act on it now')),
+    colorCheck(r),
+    h('div',{className:'acts'},sb('resolved','ok','✅ Resolved','Resolved'),sb('denied','no','❌ Denied','Denied'),
+      ((b)=>{if(needsColor(r)){b.disabled=true;b.title='Check the username colour first'}return b})(sb('valid',r.aiv?'va ai':'va','👍 Valid','Valid, can\u2019t act on it now'))),
     h('label',{className:'chk an'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking'),
     h('small',{id:'dl',className:'mu',textContent:pend[sel]?dlText(sel):''}),
     h('div',{className:'acts'},del,can),
     dlPicker((k=>()=>D[k]?[[k,D[k]]]:[])(sel),`report-${r.username||r.userId}-${sel}`,'⬇ Download report'),
-    h('small',{className:'keys'},'Shortcuts: ',kbd('V'),' valid  ',kbd('R'),' resolved  ',kbd('D'),' denied  ',kbd('\u2190'),kbd('\u2192'),' previous/next  ',kbd('N'),' note  ',kbd('Esc'),' close'));
+    h('small',{className:'keys'},'Shortcuts: ',kbd('C'),' matches color  ',kbd('V'),' valid  ',kbd('R'),' resolved  ',kbd('D'),' denied  ',kbd('\u2190'),kbd('\u2192'),' previous/next  ',kbd('N'),' note  ',kbd('Esc'),' close'));
   paintSnav();
   if(!src){const id=sel;
     api('/images/'+id).then(d=>{
@@ -651,8 +666,35 @@ async function loadNotes(k){
   if(near)list.scrollTop=list.scrollHeight}
 setInterval(()=>{if(sel&&notesFor===sel&&!document.hidden)loadNotes(sel)},5000);
 
+// ---------- Username colour check ----------
+// Roblox's default chat name colour, worked out from the username (same maths as the Lua chat's ComputeNameColor)
+const NAME_COLORS=[['#fd2943','Red'],['#01a2ff','Blue'],['#02b857','Green'],['#6b327c','Violet'],['#da8541','Orange'],['#f5cd30','Yellow'],['#e8bac8','Pink'],['#d7c59a','Tan']];
+function nameColor(name){
+  const n=String(name||''),L=n.length;let v=0;
+  for(let i=0;i<L;i++){let c=n.charCodeAt(i),rev=L-i;if(L%2===1)rev--;if(rev%4>=2)c=-c;v+=c}
+  return NAME_COLORS[((v%8)+8)%8]}
+// Valid is locked until someone confirms the colour (already-valid reports can still be un-marked)
+const needsColor=r=>!!r&&r.colorOk!==true&&!(r.status==='valid'&&!r.aiv);
+async function setColor(v){
+  const k=sel,r=D[k];if(!r)return;
+  const old={colorOk:r.colorOk??null,colorBy:r.colorBy??null,colorByName:r.colorByName??null};
+  const up=r.colorOk===v?{colorOk:null,colorBy:null,colorByName:null}:{colorOk:v,colorBy:me.k,colorByName:P[me.k]?.displayName||me.k};
+  Object.assign(r,up);if(sel===k)paintSide();
+  try{await api('/reports/'+k,'PATCH',up)}catch(e){Object.assign(r,old);if(sel===k)paintSide();alert(e.message)}}
+function colorCheck(r){
+  const[hex,nm]=nameColor(r.username),ok=r.colorOk===true,no=r.colorOk===false;
+  return h('div',{className:'cc'+(needsColor(r)?' need':'')},
+    h('small',{className:'mu',textContent:'Username colour check: does the name in the screenshot have this colour?'}),
+    h('div',{className:'ex'},h('i',{className:'sw2',style:`background:${hex}`}),h('span',{className:'chat',style:`color:${hex}`,textContent:(r.displayName||r.username||'?')+':'}),
+      h('small',{className:'mu',textContent:`${nm} (${hex})`})),
+    h('div',{className:'cb'},
+      h('button',{className:'ok'+(ok?' on':''),textContent:'🎨 Matches color',title:'The colour matches (C)',onclick:()=>setColor(true)}),
+      h('button',{className:'no'+(no?' on':''),textContent:'✖ Doesn\u2019t match',title:'The colour is different',onclick:()=>setColor(false)})),
+    h('small',{className:ok?'ok':no?'bad':'mu',textContent:ok||no?`${ok?'Matches':'Doesn\u2019t match'}, checked by ${r.colorByName||r.colorBy||'someone'}`:'Valid unlocks once the colour matches.'}))}
+
 async function setStatus(st){
   const k=sel,r=D[k];if(!r)return;
+  if(st==='valid'&&needsColor(r))return toast(r.colorOk===false?'The username colour doesn\u2019t match, so this can\u2019t be marked Valid.':'Check the username colour first (\uD83C\uDFA8 Matches color).',{kind:'bad'});
   const old=r.status,ai=r.aiv,v=old===st&&!ai?null:st;
   const prev={status:old??null,aiv:ai??null,validBy:r.validBy??null,validByName:r.validByName??null};
   // Work out the next report before marking, because marking can move this one out of the filtered list
@@ -867,6 +909,10 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['3.3','2026-10-20',['Debug tab (Creator only): make fake test reports with your own name, username, message and word, or 5 random ones','Test reports get a fake screenshot with the name in its Roblox colour (or your own picture, or none), and are marked \uD83E\uDDEA Test report','Delete all test reports in one click, plus a status panel']],
+  ['3.2','2026-10-20',['Username colour check in the report panel: shows the colour the username should be in chat, with \uD83C\uDFA8 Matches color and \u2716 Doesn\u2019t match',
+    'Valid stays locked until someone confirms the colour matches. Press C to confirm',
+    'Shows who checked the colour']],
   ['3.1.1','2026-10-20',['Banned Reporters: \uD83D\uDDD1 Remove clears an old or duplicate scanner off the All reporters list (it comes back if that scanner is still running)']],
   ['3.1','2026-10-19',['Block this reporter: the report panel shows which scanner sent the report (name, ID, bot account, how its earlier reports ended up) with a \uD83D\uDEAB Block button',
     'Blocking can also delete that scanner\u2019s unchecked reports in one go',
@@ -931,7 +977,7 @@ const OBS=[
   {v:'home',hl:false,t:()=>`Welcome, ${P[me.k]?.displayName||me.k}!`,b:['This quick tour walks you through every tab and what it’s for.','Use Next and Back (or the arrow keys) to move around. Skip tour ends it.','You can replay it any time with the ? button at the top, or from Profile settings.']},
   {v:'home',t:'Main menu',b:['Messages from staff (broadcasts) show at the very top.','Needs attention: what\u2019s waiting right now. Click a card to jump straight to those reports.','Your stats: how many reports you’ve resolved, denied and marked valid, today, this month, this year and overall.','Reports overview: how many reports are open, handled, or marked valid by the AI.','Flagged words chart: which words get players flagged most. Switch between Reports and Users, and filter by status.','Recent activity: the latest actions taken by everyone.']},
   {v:'afr',t:'A.F.R: flagged players',b:['Every player whose chat got flagged gets a tile here. The number on the tab is how many reports are still open.','Each tile is coloured by its reports: the more reports with one status, the more of the tile that colour. The legend above the tiles shows what each colour means.','Find a player searches names, usernames, IDs and message text. Sort changes the order, for example Waiting longest. Filter shows only one word, one status, or reports that have notes.','Click a player to see all of their reports.']},
-  {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 10 seconds, so click the same button again to cancel.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).','After you mark a report, a notice at the bottom lets you Undo it.','Shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next report, N write a note, Esc close. Use \u2039 \u203A at the top of the panel to move between reports.']},
+  {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 10 seconds, so click the same button again to cancel.','Username colour check: compare the name colour in the screenshot with the one shown. Press 🎨 Matches color (or C) to unlock 👍 Valid.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).','After you mark a report, a notice at the bottom lets you Undo it.','Shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next report, N write a note, Esc close. Use \u2039 \u203A at the top of the panel to move between reports.']},
   {v:'afr',t:'Notes and downloads',b:['Notes: chat with the other mods about a report. Enter sends, Shift+Enter makes a new line. Paste, drop or 📎 a picture to attach it. You can delete your own notes.','⬇ Download report saves one report as a Zip or as an HTML Report/Arrest Case file.','On a player’s page, Download all valid grabs every valid report for that player.','Reports without a screenshot are left out of downloads.']},
   {v:'afr',t:'Export and Resolve all',b:['Export valid saves every valid report as a zip: a folder per player with the screenshots, plus a Report/Arrest Case file with the charges and total time required.','Resolve all valid marks every valid report as Resolved at once. They get deleted after 10 seconds, with a Cancel button at the top.','Tip: export first if you want to keep a copy.']},
   {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in.','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','The line under the switch tells you whether the AI is online right now.']},
@@ -1067,7 +1113,8 @@ function renderMod(main){
 // The OCR scanner sends a reporter ID with each report, made from the computer's network card (MAC) and name.
 // Only a scrambled hash is stored, never the MAC itself. Blocking an ID stops that scanner's new reports
 // (the database rules reject them too) without touching the other scanners.
-const ridOf=r=>r&&typeof r.reporter==='string'&&/^[\w-]{4,40}$/.test(r.reporter)?r.reporter:null;
+const TEST_RID='dashboard-test';
+const ridOf=r=>r&&typeof r.reporter==='string'&&r.reporter!==TEST_RID&&/^[\w-]{4,40}$/.test(r.reporter)?r.reporter:null;
 const isBlocked=rid=>!!(rid&&BRP[rid]);
 const rFields=r=>({reporter:ridOf(r),reporterName:r?.reporterName??null});
 const rOnline=x=>!!x?.seen&&Date.now()-x.seen<60000;
@@ -1140,6 +1187,67 @@ async function unblockReporter(rid){
     toast(`Unbanned ${i.name}`,{kind:'ok'});
     await Promise.all([loadReporters(),view==='brep'?loadBrep():null]);render();if(sel)paintSide()
   }catch(e){alert(e.message)}}
+// ---------- Debug (Creator only): fake reports for testing ----------
+// Test reports go through the same database rules as the scanner's, marked test:true so they're easy to spot and clear.
+const DBG_WORDS=['corn','34','glue','yam','mommy','crack','searched','fanart'];
+const DBG_PEOPLE=[[9000001,'test_player_one','Test One'],[9000002,'debug_dummy','Dummy'],[9000003,'fake_user_77','Fakey'],[9000004,'sample_guy','Sample Guy']];
+const dbgMinVer=()=>typeof SET.minScannerVer==='number'?SET.minScannerVer:0;
+let dbgPic=null;
+// A fake chat line, with the name drawn in the username's Roblox colour
+function testImage(o){
+  const c=document.createElement('canvas');c.width=720;c.height=180;const g=c.getContext('2d');
+  g.fillStyle='#10141d';g.fillRect(0,0,720,180);g.font='bold 22px system-ui,sans-serif';
+  g.fillStyle=nameColor(o.user)[0];const nm=o.disp+': ';g.fillText(nm,18,60);
+  const w=g.measureText(nm).width;g.fillStyle='#fff';g.font='22px system-ui,sans-serif';g.fillText(o.text,18+w,60);
+  g.fillStyle='#ffffff55';g.font='14px system-ui,sans-serif';g.fillText('TEST REPORT (made on the Debug tab)',18,160);
+  return c.toDataURL('image/jpeg',.85)}
+async function makeTest(o){
+  const rep={displayName:o.disp,username:o.user,userId:o.id,text:o.text,word:o.word,src:'test',test:true,testBy:me.k,
+    testByName:P[me.k]?.displayName||me.k,reporter:TEST_RID,reporterName:'Debug tab',ver:Math.max(dbgMinVer(),9999)};
+  const res=await api('/reports','POST',rep),k=res&&res.name;
+  if(!k)throw new Error('The database didn’t send back a key');
+  if(o.img!==false)await api('/images/'+k,'PUT',o.img||testImage(o)).catch(()=>{});
+  return k}
+async function clearTests(){
+  const ks=Object.keys(D).filter(k=>D[k].test);if(!ks.length)return toast('No test reports to clear.');
+  if(!confirm(`Delete all ${ks.length} test report${ks.length>1?'s':''}?`))return;
+  let n=0;
+  for(const k of ks){try{await api('/reports/'+k,'DELETE');cancelDel(k);delete D[k];n++;api('/images/'+k,'DELETE').catch(()=>{});api('/notes/'+k,'DELETE').catch(()=>{})}catch{}}
+  if(sel&&!D[sel])closeSide();toast(`Deleted ${n} test report${n!==1?'s':''}`,{kind:'ok'});render()}
+function renderDbg(main){
+  const f=(ph,v,t='text')=>h('input',{placeholder:ph,value:v,type:t});
+  const[id0,u0,d0]=DBG_PEOPLE[0];
+  const disp=f('Display name',d0),un=f('Username',u0),uid=f('User ID',id0,'number'),text=f('Message','bro send corn pls'),word=f('Flagged word','corn');
+  const noImg=h('input',{type:'checkbox'});
+  const file=h('input',{type:'file',accept:'image/*',onchange:async()=>{try{dbgPic=await shrinkImage(file.files[0]);render()}catch(e){alert(e.message)}}});
+  const one=h('button',{className:'nx2',textContent:'🧪 Create test report'});
+  one.onclick=async()=>{one.disabled=true;
+    try{const k=await makeTest({disp:disp.value.trim()||'Test',user:un.value.trim()||'test_player',id:+uid.value||9000001,text:text.value,word:word.value.trim()||null,img:noImg.checked?false:dbgPic});
+      await load();
+      toast('Test report created',{kind:'ok',action:'Open',onAction:()=>{const r=D[k];if(r){go('afr');user=String(r.userId);openSide(k)}}})}
+    catch(e){alert(e.message+'. If it says permission denied, check the rules and minScannerVer.')}
+    one.disabled=false};
+  const many=h('button',{textContent:'🎲 Create 5 random'});
+  many.onclick=async()=>{many.disabled=true;let n=0;
+    for(let i=0;i<5;i++){const[id,u,d]=DBG_PEOPLE[Math.floor(Math.random()*DBG_PEOPLE.length)],w=DBG_WORDS[Math.floor(Math.random()*DBG_WORDS.length)];
+      try{await makeTest({disp:d,user:u,id,word:w,text:`test message with ${w} #${Math.floor(Math.random()*1000)}`});n++}catch(e){alert(e.message);break}}
+    await load();toast(`Created ${n} test report${n!==1?'s':''}`,{kind:'ok'});many.disabled=false};
+  const rs=Object.values(D),tests=rs.filter(r=>r.test).length;
+  main.append(
+    h('p',{className:'mu',style:'margin-top:0;max-width:760px',textContent:'Only you can see this tab. Test reports show up in A.F.R like real ones, marked 🧪 Test report, so you can try the colour check, Valid, notes, exports and so on. Handling them counts in your stats like a real report.'}),
+    h('div',{className:'pc pset',style:'max-width:560px'},h('b',{textContent:'Fake report'}),disp,un,uid,text,word,
+      h('small',{className:'mu',textContent:'Screenshot: pick a picture, or leave it empty and a fake chat line is drawn in the username’s colour.'}),file,
+      ...(dbgPic?[h('div',{className:'npv'},h('img',{src:dbgPic}))]:[]),
+      h('label',{className:'chk'},noImg,'No screenshot at all (to test reports without one)'),
+      h('div',{className:'mform'},one,many,...(dbgPic?[h('button',{textContent:'Remove picture',onclick:()=>{dbgPic=null;render()}})]:[]))),
+    h('h2',{className:'sec',textContent:'Test reports'}),
+    h('div',{className:'mform'},h('span',{textContent:`${tests} test report${tests!==1?'s':''} in the database`}),
+      h('button',{className:'del',textContent:'🗑 Delete all test reports',disabled:!tests,onclick:clearTests})),
+    h('h2',{className:'sec',textContent:'Status'}),
+    h('div',{className:'pc',style:'max-width:560px;display:grid;gap:4px'},
+      ...[['Database',$('#st').textContent],['Reports',`${rs.length} (${rs.filter(r=>!r.status).length} unchecked, ${tests} test)`],['Profiles',Object.keys(P).length],
+        ['Scanners checked in',Object.keys(RPT).length],['Blocked reporters',Object.keys(BRP).length],['Minimum scanner version',dbgMinVer()||'off'],
+        ['Last refresh',lastLoad?new Date(lastLoad).toLocaleTimeString():'-'],['Dashboard version',CHANGES[0][0]]].map(([a,b])=>h('small',{},h('b',{textContent:a+': '}),String(b)))))}
 // Clears a scanner off the All reporters list (old or duplicate entries). Not a block: if it's still running it checks in again.
 async function removeReporter(rid){
   const i=rInfo(rid);
@@ -1148,6 +1256,7 @@ async function removeReporter(rid){
   catch(e){alert(e.message)}}
 // "Sent by" in the report panel
 function sentBy(r){
+  if(r.test)return h('div',{className:'f'},h('small',{textContent:'Sent by'}),h('span',{className:'tag wn',style:'margin-left:0',textContent:'\uD83E\uDDEA Test report'}),h('small',{className:'mu',textContent:'Made on the Debug tab by '+(r.testByName||r.testBy||'the Creator')}));
   const rid=ridOf(r);
   if(!rid)return h('div',{className:'f'},h('small',{textContent:'Sent by'}),h('span',{className:'mu',textContent:'Unknown (sent before reporter IDs were added)'}));
   const i=rInfo(rid),b=BRP[rid],rec=recText(rRecord()[rid]),x=RPT[rid];
@@ -1483,7 +1592,7 @@ addEventListener('keydown',e=>{
   if(e.key==='/'&&view==='afr'&&!user){e.preventDefault();$('#q').focus();return}
   if(!sel||!D[sel])return;
   const k=e.key.length===1?e.key.toLowerCase():e.key;
-  const act={v:()=>setStatus('valid'),r:()=>setStatus('resolved'),d:()=>setStatus('denied'),
+  const act={c:()=>setColor(true),v:()=>setStatus('valid'),r:()=>setStatus('resolved'),d:()=>setStatus('denied'),
     ArrowRight:()=>stepSide(1),j:()=>stepSide(1),ArrowLeft:()=>stepSide(-1),k:()=>stepSide(-1),
     n:()=>$('#side .nin textarea')?.focus()}[k];
   if(act){e.preventDefault();act()}});
