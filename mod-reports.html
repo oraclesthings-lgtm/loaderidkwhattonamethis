@@ -867,6 +867,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['3.1.1','2026-10-20',['Banned Reporters: \uD83D\uDDD1 Remove clears an old or duplicate scanner off the All reporters list (it comes back if that scanner is still running)']],
   ['3.1','2026-10-19',['Block this reporter: the report panel shows which scanner sent the report (name, ID, bot account, how its earlier reports ended up) with a \uD83D\uDEAB Block button',
     'Blocking can also delete that scanner\u2019s unchecked reports in one go',
     'New Banned Reporters tab: every blocked scanner with who blocked it, why, and the report it was blocked over. Unban puts it back',
@@ -1139,6 +1140,12 @@ async function unblockReporter(rid){
     toast(`Unbanned ${i.name}`,{kind:'ok'});
     await Promise.all([loadReporters(),view==='brep'?loadBrep():null]);render();if(sel)paintSide()
   }catch(e){alert(e.message)}}
+// Clears a scanner off the All reporters list (old or duplicate entries). Not a block: if it's still running it checks in again.
+async function removeReporter(rid){
+  const i=rInfo(rid);
+  if(!confirm(`Remove ${i.name} (ID ${rid}) from the list?\n\nThis isn’t a block. If that scanner is still running, it shows up again next time it checks in.`))return;
+  try{await api('/reporters/'+rid,'DELETE');delete RPT[rid];if(brOpen===rid)brOpen=null;toast(`Removed ${i.name}`,{kind:'ok',ms:2500});render()}
+  catch(e){alert(e.message)}}
 // "Sent by" in the report panel
 function sentBy(r){
   const rid=ridOf(r);
@@ -1170,7 +1177,8 @@ function reporterCard(i,rec){
         ...(lots?[h('span',{className:'tag wn',title:'Half or more of its handled reports were denied',textContent:'Mostly denied'})]:[])),
       ridLine(i.rid)),
       h('div',{className:'mact'},b?h('button',{textContent:'✅ Unban',onclick:()=>unblockReporter(i.rid)})
-        :h('button',{className:brOpen===i.rid?'on':'',textContent:'🚫 Block',onclick:()=>{brOpen=brOpen===i.rid?null:i.rid;render()}}))),
+        :h('button',{className:brOpen===i.rid?'on':'',textContent:'🚫 Block',onclick:()=>{brOpen=brOpen===i.rid?null:i.rid;render()}}),
+        ...(!b&&x?[h('button',{textContent:'🗑 Remove',title:'Remove this scanner from the list',onclick:()=>removeReporter(i.rid)})]:[]))),
     ...lines.map(t=>h('small',{className:'mu',textContent:t})));
   if(b){
     box.append(h('small',{textContent:`Blocked by ${b.byName||b.by}${b.at?' · '+new Date(b.at).toLocaleString():''}`}),
