@@ -297,6 +297,12 @@ header button{padding:7px 10px}
 .bform input:not([type=checkbox]){width:100%}
 .blk{margin-top:8px;width:100%}
 .pc.blocked{border-color:#7a3434;background:linear-gradient(145deg,#2a1519,#0e1420)}
+.pinfo{max-width:620px;margin-bottom:16px}
+.pinfo .pih{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.pinfo table{border-collapse:collapse;width:100%;margin-bottom:8px}
+.pinfo th,.pinfo td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle;word-break:break-word}
+.pinfo th{color:var(--mu);font-weight:500;width:120px;white-space:nowrap}
+.pinfo td a{color:var(--ac)}
 </style>
 </head>
 <body>
@@ -515,7 +521,9 @@ function histList(n,pred){
 
 // Remembers where the players list was scrolled to, so Back lands on the same spot instead of the top
 let gridY=0;
-function openPlayer(id){gridY=window.scrollY;user=id;render();window.scrollTo(0,0)}
+function openPlayer(id){gridY=window.scrollY;user=id;render();window.scrollTo(0,0);
+  // the info card counts handled reports from the full history
+  if(Date.now()-lastStats>60000)loadStats().then(()=>{if(user===id&&!busy())render()})}
 function backToGrid(){user=null;render();restoreGridY()}
 function restoreGridY(){const y=gridY;window.scrollTo(0,y);requestAnimationFrame(()=>window.scrollTo(0,y))}
 const SORTS=[['new','Newest report first'],['wait','Waiting longest'],['open','Most unchecked'],['most','Most reports'],['name','Name A\u2013Z']];
@@ -542,13 +550,36 @@ function renderAfr(main){
     const g=gs.find(x=>x.id===user);if(!g){user=null;render();restoreGridY();return}
     const nv=g.list.filter(r=>r.status==='valid').length,gid=g.id;
     main.append(h('div',{className:'tl',style:'margin-bottom:14px;flex-wrap:wrap'},head(g.id,48,g.name||g.user),h('h2',{style:'margin:0;flex:1',textContent:`${g.name||g.user} (@${g.user})`}),
-      nv?h('div',{style:'min-width:300px'},dlPicker(()=>Object.entries(D).filter(([k,r])=>r.status==='valid'&&String(r.userId??r.username)===gid),`valid-reports-${g.user||g.id}`,`⬇ Download all valid (${nv})`)):''),h('div',{className:'grid'},...g.list.map(r=>
+      nv?h('div',{style:'min-width:300px'},dlPicker(()=>Object.entries(D).filter(([k,r])=>r.status==='valid'&&String(r.userId??r.username)===gid),`valid-reports-${g.user||g.id}`,`⬇ Download all valid (${nv})`)):''),playerCard(g),h('div',{className:'grid'},...g.list.map(r=>
       h('button',{className:`tile s-${markOf(r)}${r.k===sel?' sel':''}`,onclick:()=>openSide(r.k)},
         h('small',{className:'trow'},h('span',{className:'tlbl',textContent:(r.word?`Flagged: ${r.word}`:'')+(isBlocked(ridOf(r))?' · 🚫 blocked reporter':'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),
           h('span',{className:'tm2',textContent:ago(pushTime(r.k)),title:new Date(pushTime(r.k)).toLocaleString()})),
         h('div',{className:'msg'},hl(r.text,r.word))))));
   }}
 
+// Everything about one player in a table you can copy: names, ID, profile, how their reports ended up, total time
+function playerStats(g){
+  const all={...HA,...H},st={};
+  for(const id of Object.keys(all).sort()){const e=all[id];
+    if(!e||!e.reportId||String(e.userId??e.username)!==g.id)continue;
+    st[e.reportId]={s:e.action==='cleared'?'open':e.action,word:e.word}}
+  for(const r of g.list)st[r.k]={s:r.status||'open',word:r.word};  // reports still in the list: their status now
+  const v=Object.values(st),isV=x=>x.s==='valid'||x.s==='resolved';
+  let d=0,hr=0;const noReason=new Set();
+  for(const x of v.filter(isV)){const R=REASONS[String(x.word||'').toLowerCase()];if(R){d+=R[1];hr+=R[2]}else noReason.add(x.word||'?')}
+  return{total:v.length,valid:v.filter(isV).length,denied:v.filter(x=>x.s==='denied').length,open:v.filter(x=>x.s==='open').length,
+    time:dur(d,hr),noReason:[...noReason]}}
+function playerCard(g){
+  const r0=g.list[0]||{},uid=r0.userId,link=/^\d+$/.test(String(uid))?`https://www.roblox.com/users/${uid}/profile`:null,S=playerStats(g);
+  const rows=[['Display name',g.name||r0.displayName],['Username','@'+(g.user||r0.username||'?')],['User ID',uid],['Profile',link],
+    ['Reports',S.total],['Validated',S.valid],['Denied',S.denied],['Unchecked',S.open],['Total time',S.time+(S.noReason.length?` (no time set for: ${S.noReason.join(', ')})`:'')]];
+  const text=rows.filter(([,v])=>v!=null&&v!=='').map(([l,v])=>`${l}: ${v}`).join('\n');
+  return h('div',{className:'pc pinfo'},
+    h('div',{className:'pih'},h('b',{textContent:'Player info'}),h('button',{textContent:'\uD83D\uDCCB Copy info',title:'Copy the whole table as text (pastes nicely into Discord)',onclick:()=>copyText(text)})),
+    h('table',{},...rows.map(([l,v])=>h('tr',{},h('th',{textContent:l}),
+      h('td',{},l==='Profile'&&v?h('a',{href:v,target:'_blank',rel:'noopener noreferrer',textContent:v}):h('span',{textContent:v??'-'}),
+        v!=null&&v!==''&&['Display name','Username','User ID','Profile'].includes(l)?h('button',{className:'cp',textContent:'Copy',onclick:()=>copyText(v)}):'')))),
+    h('small',{className:'mu',textContent:'Validated = marked Valid or Resolved. Total time adds up the Report/Arrest Case time for every validated report. Counts include reports that were already handled and deleted.'}))}
 function openZoom(src,onClose){
   const img=h('img',{src,draggable:false}),box=h('div',{id:'zm'});
   let sc=1,x=0,y=0,fit=1,drag=null;
@@ -910,6 +941,8 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['3.6','2026-10-27',['Player info table on every player\u2019s page in A.F.R: display name, username, user ID, profile link, reports, validated, denied, unchecked and total time','\uD83D\uDCCB Copy info copies the whole table as text (pastes nicely into Discord), and each name, ID and link has its own Copy button','Counts include reports that were already handled and deleted']],
+  ['3.5','2026-10-27',['Desktop notifications: turn them on in Profile settings and new reports pop up as a Windows notification while the dashboard is in the background. Click it to open the report','The dashboard keeps checking for new reports in the background, so the sound plays too (background tabs check about once a minute)','Report/Arrest Case: deltahub, 34 and 34r are now +5 Days']],
   ['3.4','2026-10-21',['The username colour check is replaced by \uD83D\uDDBC Did you check the image?','👍 Valid stays locked until someone opens the screenshot full screen and closes it again. Press I to open it','Shows who checked the image and when, for everyone']],
   ['3.3','2026-10-20',['Debug tab (Creator only): make fake test reports with your own name, username, message and word, or 5 random ones','Test reports get a fake screenshot with the name in its Roblox colour (or your own picture, or none), and are marked \uD83E\uDDEA Test report','Delete all test reports in one click, plus a status panel']],
   ['3.2','2026-10-20',['Username colour check in the report panel: shows the colour the username should be in chat, with \uD83C\uDFA8 Matches color and \u2716 Doesn\u2019t match',
@@ -987,7 +1020,7 @@ const OBS=[
   {v:'hist',t:'History',b:['Every action anyone takes on a report: resolved, denied, valid, reopened and deleted.','Each line shows the player, their message, who did it and when.']},
   {v:'brep',t:'Banned Reporters',b:['Reporters are the scanners that send reports in. Each has its own ID from the computer it runs on.','Block a scanner that sends false reports from the report panel (\uD83D\uDEAB Block this reporter) or from here. Only that scanner stops.','Check the ID before you press Unban so you unban the right one.']},
   {v:'all',t:'All profiles',b:['Everyone’s stats side by side, with Creator and Admin tags.','If someone hid their stats, you’ll see nil instead of numbers.']},
-  {v:'prof',t:'Profile settings',b:['Set a profile picture, change your display name or password.','Hide my stats: other mods see nil instead of your numbers.','Reviewing: go to the next report automatically after marking one, and play a sound when new reports come in.','🧭 Replay onboarding starts this tour again.']},
+  {v:'prof',t:'Profile settings',b:['Set a profile picture, change your display name or password.','Hide my stats: other mods see nil instead of your numbers.','Reviewing: go to the next report automatically after marking one, play a sound when new reports come in, and get a desktop notification for them while the dashboard is in the background.','🧭 Replay onboarding starts this tour again.']},
   {v:'bc',staff:true,t:'Broadcast',b:['Post a message for everyone. The newest 3 show at the top of the Main menu.','Pick a level: 📢 Announcement, ⚠️ Warning or 🚨 Important.','Remove a broadcast once it’s no longer needed. Administrators can’t remove the Creator’s.']},
   {v:'mod',staff:true,t:'Moderation',b:['⚠ Warn: they get a pop-up they have to accept before carrying on.','👢 Kick: signs them out within seconds.','⛔ Ban: signs them out and keeps them out for 1 hour up to permanently. ✅ Unban lifts it early.','🧹 Clear warnings removes all of their warnings.','The Moderation log lists every action. Administrators can’t act on the Creator.']},
   {v:'log',t:'Changelogs',b:['Every update and what it changed, newest first.']},
@@ -1377,6 +1410,8 @@ function renderProf(main){
     h('b',{textContent:'Reviewing'}),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking one'),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:ls('ping')==='1',onchange:e=>{ls('ping',e.target.checked?'1':'0');if(e.target.checked)ping()}}),'Play a sound when new reports come in'),
+    h('label',{className:'chk'},(b=>{b.onchange=e=>setNotify(e.target.checked,e.target);return b})(h('input',{type:'checkbox',checked:canNotify()})),'Desktop notification when new reports come in (shows over other windows, while this tab is in the background)'),
+    h('small',{className:'mu',textContent:'Keeps checking for new reports in the background. Keep the browser open (minimised is fine). Background tabs check about once a minute.'}),
     h('small',{className:'mu',textContent:'These are saved in this browser only.'}),
     h('b',{textContent:'Onboarding'}),
     h('button',{textContent:'🧭 Replay onboarding',onclick:startOb}),
@@ -1439,14 +1474,14 @@ const REASONS={
   'jaboner':['Player has said "jaboner" in a sexual context: Inappropriate Behaviour',3,0],
   'glue':['Player has said "glue", in a sexual context: Inappropriate Behaviour',3,0],
   'search history':['Player has made a search history joke: Unallowed/Inappropriate Behaviour',0,5],
-  'deltahub':['Player has said "Deltahub", a fictional site reference to an 18+ site: Inappropriate Behaviour',3,0],
+  'deltahub':['Player has said "Deltahub", a fictional site reference to an 18+ site: Inappropriate Behaviour',5,0],
   'searching':['Player has made a search history joke: Unallowed/Inappropriate Behaviour',0,5],
   'searched':['Player has made a search history joke: Unallowed/Inappropriate Behaviour',0,5],
   'corn':['Player bypassed the word "porn" by using corn: Inappropriate Behaviour + Filter bypass',5,0],
-  '34':['Player has said "34" referencing an 18+ site called rule34: Inappropriate Behaviour',3,0],
+  '34':['Player has said "34" referencing an 18+ site called rule34: Inappropriate Behaviour',5,0],
   'fanart':['Player has said "fanart", while implying sexual art: Inappropriate Behaviour',3,0],
   'fanarts':['Player has said "fanarts", while implying sexual art: Inappropriate Behaviour',3,0],
-  '34r':['Player has said "34r" referencing an 18+ site called rule34: Inappropriate Behaviour',3,0],
+  '34r':['Player has said "34r" referencing an 18+ site called rule34: Inappropriate Behaviour',5,0],
 };
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const dur=(d,hr)=>{d+=Math.floor(hr/24);hr%=24;const p=[];if(d)p.push(`${d} Day${d>1?'s':''}`);if(hr)p.push(`${hr}h`);return p.length?'+'+p.join(' '):'+0'};
@@ -1557,16 +1592,38 @@ async function patchMe(o){try{await api('/profiles/'+me.k,'PATCH',o);Object.assi
 async function load(){
   if(loading||!me)return;loading=true;const rf=$('#rf');rf.classList.add('spin');
   try{await loadInner()}finally{loading=false;rf.classList.remove('spin')}}
+// Opens new reports: one report straight in its panel, several in A.F.R
+function showFresh(fresh){
+  flt={type:null,val:null};paintFlt();go('afr');
+  if(fresh.length===1&&D[fresh[0]]){const r=D[fresh[0]];user=String(r.userId??r.username);openSide(fresh[0])}}
+// Windows notification for new reports while this tab is in the background or the window isn't focused
+const canNotify=()=>'Notification' in window&&Notification.permission==='granted'&&ls('notify')==='1';
+function desktopNotify(fresh){
+  if(!canNotify()||(!document.hidden&&document.hasFocus()))return;
+  const rs=fresh.map(k=>D[k]).filter(Boolean);if(!rs.length)return;
+  const one=rs[0],nm=r=>r.displayName||r.username||'someone';
+  const title=rs.length===1?`New report: ${nm(one)}${one.username?' (@'+one.username+')':''}`:`${rs.length} new reports`;
+  const body=rs.length===1?`${one.word?'Flagged for “'+one.word+'”: ':''}${String(one.text||'').slice(0,140)}`:rs.slice(0,4).map(r=>`${nm(r)}${r.word?' ('+r.word+')':''}`).join(', ')+(rs.length>4?` and ${rs.length-4} more`:'');
+  try{const n=new Notification(title,{body,tag:'mod-reports-new',renotify:true});
+    n.onclick=()=>{try{window.focus()}catch{}n.close();showFresh(fresh)}}catch{}}
+async function setNotify(on,box){
+  if(!on){ls('notify','0');return}
+  if(!('Notification' in window)){box.checked=false;return toast('This browser can’t show desktop notifications.',{kind:'bad'})}
+  let p=Notification.permission;
+  if(p==='default')p=await Notification.requestPermission();
+  if(p!=='granted'){box.checked=false;ls('notify','0');return toast('Notifications are blocked for this page. Allow them in the browser’s site settings (the icon left of the address bar), then tick this again.',{kind:'bad',ms:9000})}
+  ls('notify','1');
+  try{new Notification('Desktop notifications are on',{body:'New reports will pop up here while the dashboard is in the background.',tag:'mod-reports-test'})}catch{}
+  toast('Desktop notifications on',{kind:'ok'})}
 async function loadInner(){
   if(!me)return;
   try{D=await api('/reports')||{};stat('Live');loaded=true;lastLoad=Date.now()}catch(e){stat(e.message,1);if(!loaded)render();return}
   {const keys=Object.keys(D);
     if(seenKeys){const fresh=keys.filter(k=>!seenKeys.has(k)&&!D[k].status);
       if(fresh.length){
-        toast(`${fresh.length} new report${fresh.length>1?'s':''}`+(fresh.length===1?`: ${D[fresh[0]].displayName||D[fresh[0]].username}`:''),{action:'View',ms:8000,onAction:()=>{
-          flt={type:null,val:null};paintFlt();go('afr');
-          if(fresh.length===1&&D[fresh[0]]){const r=D[fresh[0]];user=String(r.userId??r.username);openSide(fresh[0])}}});
-        if(ls('ping')==='1')ping()}}
+        toast(`${fresh.length} new report${fresh.length>1?'s':''}`+(fresh.length===1?`: ${D[fresh[0]].displayName||D[fresh[0]].username}`:''),{action:'View',ms:8000,onAction:()=>showFresh(fresh)});
+        if(ls('ping')==='1')ping();
+        desktopNotify(fresh)}}
     seenKeys=new Set(keys)}
   try{P=await api('/profiles')||{}}catch{}
   if(guard(P[me.k]))return;
@@ -1599,7 +1656,8 @@ addEventListener('keydown',e=>{
     n:()=>$('#side .nin textarea')?.focus()}[k];
   if(act){e.preventDefault();act()}});
 addEventListener('click',()=>{if(fOpen){fOpen=false;paintFlt()}if(bOpen){bOpen=false;render()}});
-setInterval(()=>{if(!document.hidden)load()},20000);
+// Keeps checking while the tab is in the background too, so the sound and desktop notification still work
+setInterval(load,20000);
 setInterval(()=>{if(!document.hidden&&me&&view==='launch')loadLauncher().then(()=>{if(view==='launch'&&!busy())render()})},5000);
 setInterval(()=>{const n=$('#dl');if(n&&pend[sel])n.textContent=dlText(sel);paintCd();
   if(!stBad&&lastLoad&&!loading){const x=Date.now()-lastLoad;$('#st').textContent='Live \u00B7 '+(x<5000?'just now':ago(lastLoad))}},1000);
