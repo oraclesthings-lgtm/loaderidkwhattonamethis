@@ -294,6 +294,19 @@ header button{padding:7px 10px}
 .pinfo th,.pinfo td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle;word-break:break-word}
 .pinfo th{color:var(--mu);font-weight:500;width:120px;white-space:nowrap}
 .pinfo td a{color:var(--ac)}
+.prec{padding:0;overflow:hidden}
+.prec .phd{display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:none;border:0;border-radius:0;padding:12px 14px}
+.prec .phd:hover{background:#ffffff08}
+.prec .phd .rb small{display:block}
+.prec .phd .tm{flex:none}
+.prec .chev{color:var(--mu);flex:none}
+.prec.on{border-color:var(--ac)}
+.prec .pb{padding:0 14px 14px;display:grid;gap:12px}
+.prec .pb .pinfo{margin-bottom:0}
+.pchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+.pchip{font-size:12px;padding:1px 8px;border-radius:9px;background:#ffffff14;white-space:nowrap}
+.pchip.g{background:#1f9d5559}.pchip.r{background:#c23b3b59}.pchip.t{background:#6f8cff3d}
+@media(max-width:760px){.prec .phd{flex-wrap:wrap}.prec .phd .rb{min-width:60%}}
 </style>
 </head>
 <body>
@@ -334,8 +347,8 @@ const $=s=>document.querySelector(s);
 const h=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);e.append(...k);return e};
 let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={},B={},W={},ML={},modErr='',modOpen=null,loading=false,loaded=false,lastLoad=0,stBad=false,seenKeys=null,hf={a:'all',mine:false,q:''},RPT={},BRP={},BRL={},brOpen=null,brq='',rptErr='';
 
-const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',brep:'Banned Reporters',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation',dbg:'Debug'};
-const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['brep','Banned Reporters','Scanners blocked from reporting'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed'],['dbg','Debug','Creator only: test reports']];
+const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',plist:'Player records',brep:'Banned Reporters',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation',dbg:'Debug'};
+const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['plist','Player records','Everyone who\u2019s been reported'],['brep','Banned Reporters','Scanners blocked from reporting'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed'],['dbg','Debug','Creator only: test reports']];
 // Tabs only the Creator and Administrators can see or open
 const STAFF=new Set(['bc','mod']);
 // Tabs only the Creator can see or open
@@ -393,7 +406,7 @@ function groups(ff){
   return Object.entries(m).map(([id,list])=>{list.sort((a,b)=>a.k<b.k?1:-1);return{id,list,name:list[0].displayName,user:list[0].username}})
     .sort((a,b)=>a.list[0].k<b.list[0].k?1:-1)}
 
-function go(v){const fromPlayer=view==='afr'&&v==='afr'&&user!=null;view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(fromPlayer)restoreGridY();else window.scrollTo(0,0);if(st)loadStats().then(render);if(v==='mod')loadMod().then(render);if(v==='brep'){brOpen=null;Promise.all([loadReporters(),loadBrep()]).then(render)}if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
+function go(v){const fromPlayer=view==='afr'&&v==='afr'&&user!=null;view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(fromPlayer)restoreGridY();else window.scrollTo(0,0);if(st)loadStats().then(render);if(v==='mod')loadMod().then(render);if(v==='plist'){plOpen=null;loadStats().then(()=>{if(view==='plist'&&!busy())render()})}if(v==='brep'){brOpen=null;Promise.all([loadReporters(),loadBrep()]).then(render)}if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
 function paintNav(){
   const open=Object.values(D).filter(r=>!r.status).length;
   document.title=open?`(${open}) Mod Reports`:'Mod Reports';
@@ -414,7 +427,7 @@ function render(){
   $('#q').hidden=!(view==='afr'&&!user);
   $('#sort').hidden=!(view==='afr'&&!user);
   $('#ex').hidden=view!=='afr';{const n=Object.values(D).filter(r=>r.status==='valid').length;$('#rv').hidden=view!=='afr';$('#rv').disabled=!n;$('#rv').textContent=`✅ Resolve all valid (${n})`}$('#fw').hidden=view!=='afr';$('#ex').textContent=`Export valid (${Object.values(D).filter(r=>r.status==='valid').length})`;
-  ({home:renderHome,afr:renderAfr,hist:renderHist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod,brep:renderBrep,dbg:renderDbg}[view])(main);
+  ({home:renderHome,afr:renderAfr,hist:renderHist,plist:renderPlist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod,brep:renderBrep,dbg:renderDbg}[view])(main);
   paintSnav()}
 
 function renderHome(main){
@@ -548,29 +561,102 @@ function renderAfr(main){
         h('div',{className:'msg'},hl(r.text,r.word))))));
   }}
 
-// Everything about one player in a table you can copy: names, ID, profile, how their reports ended up, total time
-function playerStats(g){
-  const all={...HA,...H},st={};
+// ---------- Player records: every reported player, from History + the open reports (view only) ----------
+// One entry per report: its latest outcome, rebuilt from History (handled reports are deleted, History keeps them)
+const isTestEntry=e=>!!e&&(e.test===true||DBG_PEOPLE.some(p=>String(p[0])===String(e.userId)));
+function playerRecords(noTests){
+  const all={...HA,...H},rep={},realT=(k,t)=>{const p=pushTime(k);return p>1e12?p:(t||0)};
   for(const id of Object.keys(all).sort()){const e=all[id];
-    if(!e||!e.reportId||String(e.userId??e.username)!==g.id)continue;
-    st[e.reportId]={s:e.action==='cleared'?'open':e.action,word:e.word}}
-  for(const r of g.list)st[r.k]={s:r.status||'open',word:r.word};  // reports still in the list: their status now
-  const v=Object.values(st),isV=x=>x.s==='valid'||x.s==='resolved';
-  let d=0,hr=0;const noReason=new Set();
-  for(const x of v.filter(isV)){const R=REASONS[String(x.word||'').toLowerCase()];if(R){d+=R[1];hr+=R[2]}else noReason.add(x.word||'?')}
-  return{total:v.length,valid:v.filter(isV).length,denied:v.filter(x=>x.s==='denied').length,open:v.filter(x=>x.s==='open').length,
-    time:dur(d,hr),noReason:[...noReason]}}
-function playerCard(g){
-  const r0=g.list[0]||{},uid=r0.userId,link=/^\d+$/.test(String(uid))?`https://www.roblox.com/users/${uid}/profile`:null,S=playerStats(g);
-  const rows=[['Display name',g.name||r0.displayName],['Username','@'+(g.user||r0.username||'?')],['User ID',uid],['Profile',link],
+    if(!e||!e.reportId||(e.userId==null&&!e.username)||(noTests&&isTestEntry(e)))continue;
+    const x=rep[e.reportId]??={k:e.reportId,t:realT(e.reportId,e.t)};
+    Object.assign(x,{pid:String(e.userId??e.username),s:e.action==='cleared'?'open':e.action,by:e.byName||e.by||null,at:e.t||null});
+    if(e.displayName)x.name=e.displayName;if(e.username)x.user=e.username;if(e.userId!=null)x.uid=e.userId;
+    if(e.word)x.word=e.word;if(e.text)x.text=e.text;if(e.action==='valid')x.validBy=e.byName||e.by||null}
+  for(const k in D){const r=D[k];if(noTests&&r.test)continue;
+    const x=rep[k]??={k,t:realT(k)};
+    Object.assign(x,{pid:String(r.userId??r.username),s:r.aiv?'ai':(r.status||'open'),live:true,
+      name:r.displayName??x.name,user:r.username??x.user,uid:r.userId??x.uid,word:r.word??x.word,text:r.text??x.text});
+    if(r.validByName||r.validBy)x.validBy=r.validByName||r.validBy}
+  const out={};
+  for(const x of Object.values(rep)){(out[x.pid]??={id:x.pid,reps:[]}).reps.push(x)}
+  for(const p of Object.values(out)){
+    p.reps.sort((a,b)=>b.t-a.t);
+    p.name=p.reps.find(x=>x.name)?.name;p.user=p.reps.find(x=>x.user)?.user;p.uid=p.reps.find(x=>x.uid!=null)?.uid;
+    p.last=Math.max(0,...p.reps.map(x=>Math.max(x.t||0,x.at||0)));p.S=recStats(p.reps)}
+  return out}
+// Counts + total time for a list of reports. AI valid counts as unchecked until a mod confirms it.
+function recStats(reps){
+  const isV=x=>x.s==='valid'||x.s==='resolved';let d=0,hr=0;const noReason=new Set();
+  for(const x of reps.filter(isV)){const R=REASONS[String(x.word||'').toLowerCase()];if(R){d+=R[1];hr+=R[2]}else noReason.add(x.word||'?')}
+  return{total:reps.length,valid:reps.filter(isV).length,denied:reps.filter(x=>x.s==='denied').length,
+    open:reps.filter(x=>x.s==='open'||x.s==='ai').length,time:dur(d,hr),hours:d*24+hr,noReason:[...noReason]}}
+// The copyable table (used on a player's A.F.R page and in Player records)
+function infoCard(p){
+  const uid=p.uid,link=/^\d+$/.test(String(uid))?`https://www.roblox.com/users/${uid}/profile`:null,S=p.S||recStats([]);
+  const rows=[['Display name',p.name],['Username','@'+(p.user||'?')],['User ID',uid],['Profile',link],
     ['Reports',S.total],['Validated',S.valid],['Denied',S.denied],['Unchecked',S.open],['Total time',S.time+(S.noReason.length?` (no time set for: ${S.noReason.join(', ')})`:'')]];
   const text=rows.filter(([,v])=>v!=null&&v!=='').map(([l,v])=>`${l}: ${v}`).join('\n');
   return h('div',{className:'pc pinfo'},
-    h('div',{className:'pih'},h('b',{textContent:'Player info'}),h('button',{textContent:'\uD83D\uDCCB Copy info',title:'Copy the whole table as text (pastes nicely into Discord)',onclick:()=>copyText(text)})),
+    h('div',{className:'pih'},h('b',{textContent:'Player info'}),h('button',{textContent:'📋 Copy info',title:'Copy the whole table as text (pastes nicely into Discord)',onclick:()=>copyText(text)})),
     h('table',{},...rows.map(([l,v])=>h('tr',{},h('th',{textContent:l}),
       h('td',{},l==='Profile'&&v?h('a',{href:v,target:'_blank',rel:'noopener noreferrer',textContent:v}):h('span',{textContent:v??'-'}),
         v!=null&&v!==''&&['Display name','Username','User ID','Profile'].includes(l)?h('button',{className:'cp',textContent:'Copy',onclick:()=>copyText(v)}):'')))),
-    h('small',{className:'mu',textContent:'Validated = marked Valid or Resolved. Total time adds up the Report/Arrest Case time for every validated report. Counts include reports that were already handled and deleted.'}))}
+    h('small',{className:'mu',textContent:'Validated = marked Valid or Resolved by a mod (AI valid counts as unchecked until a mod confirms it). Total time adds up the Report/Arrest Case time for every validated report. Counts include reports that were already handled and deleted.'}))}
+const playerStats=g=>(playerRecords()[g.id]||{S:recStats([])}).S;
+function playerCard(g){
+  const p=playerRecords()[g.id]||{reps:[],S:recStats([])},r0=g.list[0]||{};
+  return infoCard({name:g.name||r0.displayName||p.name,user:g.user||r0.username||p.user,uid:r0.userId??p.uid,S:p.S})}
+
+let pf={a:'all',q:'',sort:'last',n:60},plOpen=null;
+const PSORTS=[['last','Latest first'],['valid','Most validated'],['time','Most time'],['most','Most reports'],['denied','Most denied'],['name','Name A–Z']];
+const OUT={resolved:['✅','Resolved','resolved'],denied:['❌','Denied','denied'],valid:['👍','Valid','valid'],ai:['🤖','AI valid, unchecked','ai'],open:['•','Unchecked','cleared'],deleted:['🗑','Deleted','']};
+function renderPlist(main){
+  const recs=Object.values(playerRecords(true));
+  const n={all:recs.length,valid:recs.filter(p=>p.S.valid).length,denied:recs.filter(p=>p.S.denied).length};
+  const chips=h('div',{className:'seg2'},...[['all','All'],['valid','Validated'],['denied','Denied']].map(([v,l])=>
+    h('button',{className:pf.a===v?'on':'',textContent:`${l} (${n[v]})`,title:v==='valid'?'Players with at least one validated report':v==='denied'?'Players with at least one denied report':'Everyone who has been reported',onclick:()=>{pf.a=v;pf.n=60;render()}})));
+  const q=h('input',{placeholder:'Search name, @username, ID or message',value:pf.q,oninput:e=>{pf.q=e.target.value;pf.n=60;paintPlist()}});
+  const so=h('select',{title:'Sort players',onchange:e=>{pf.sort=e.target.value;paintPlist()}},...PSORTS.map(([v,l])=>h('option',{value:v,textContent:l,selected:pf.sort===v})));
+  main.append(h('p',{className:'mu',style:'margin-top:0;max-width:760px',textContent:'Everyone who has been reported, including players whose reports were already handled and deleted. View only: click a player to see their info and every report. Test reports from the Debug tab are left out.'}),
+    h('div',{className:'hbar'},chips,q,so),h('div',{id:'pl'}));
+  paintPlist(recs);
+  loadHeads(recs.sort((a,b)=>b.last-a.last).slice(0,150).map(p=>p.id))}
+function paintPlist(recs){
+  const box=$('#pl');if(!box)return;recs??=Object.values(playerRecords(true));
+  if(hErr){box.replaceChildren(h('p',{className:'mu',textContent:'Can’t read history. Add the /history rules in Firebase.'}));return}
+  const q=pf.q.trim().toLowerCase().replace(/^@/,'');
+  let l=recs.filter(p=>(pf.a==='all'||(pf.a==='valid'?p.S.valid:p.S.denied)>0)&&
+    (!q||[p.name,p.user,p.id,...p.reps.map(x=>x.text)].join(' ').toLowerCase().includes(q)));
+  const nm=p=>String(p.name||p.user||p.id);
+  l.sort({last:(a,b)=>b.last-a.last,valid:(a,b)=>b.S.valid-a.S.valid||b.last-a.last,time:(a,b)=>b.S.hours-a.S.hours||b.last-a.last,
+    most:(a,b)=>b.S.total-a.S.total||b.last-a.last,denied:(a,b)=>b.S.denied-a.S.denied||b.last-a.last,name:(a,b)=>nm(a).localeCompare(nm(b))}[pf.sort]||(()=>0));
+  const shown=l.slice(0,pf.n);
+  box.replaceChildren(
+    ...(shown.length?[h('div',{className:'list'},...shown.map(plRow))]:[h('p',{className:'mu',textContent:recs.length?'No player matches.':'Nobody has been reported yet.'})]),
+    h('div',{className:'mform',style:'margin-top:10px'},h('small',{className:'mu',textContent:`Showing ${shown.length} of ${l.length} player${l.length!==1?'s':''}`}),
+      ...(l.length>shown.length?[h('button',{textContent:'Show more',onclick:()=>{pf.n+=60;paintPlist()}})]:[])))}
+function plRow(p){
+  const open=plOpen===p.id,S=p.S,chip=(t,c)=>h('span',{className:'pchip '+(c||''),textContent:t});
+  const row=h('div',{className:'pc prec'+(open?' on':'')},
+    h('button',{className:'phd',title:open?'Hide':'Show their info and reports',onclick:()=>{plOpen=open?null:p.id;paintPlist()}},
+      head(p.id,40,p.name||p.user),
+      h('div',{className:'rb'},h('b',{textContent:p.name||p.user||p.id}),h('small',{className:'mu',textContent:`@${p.user||'?'} · ${p.uid??p.id}`}),
+        h('div',{className:'pchips'},chip(`${S.total} report${S.total!==1?'s':''}`),
+          ...(S.valid?[chip(`${S.valid} validated`,'g')]:[]),...(S.denied?[chip(`${S.denied} denied`,'r')]:[]),...(S.open?[chip(`${S.open} unchecked`)]:[]),
+          ...(S.hours?[chip(S.time,'t')]:[]))),
+      h('small',{className:'tm',textContent:p.last?when(p.last):'',title:p.last?new Date(p.last).toLocaleString():''}),
+      h('span',{className:'chev',textContent:open?'▴':'▾'})));
+  if(open){
+    const live=p.reps.some(x=>x.live);
+    row.append(h('div',{className:'pb'},infoCard(p),
+      ...(live?[h('div',{},h('button',{textContent:'Open their reports in A.F.R',onclick:()=>{go('afr');openPlayer(p.id)}}))]:[]),
+      h('b',{textContent:`Reports (${p.reps.length})`}),
+      h('div',{className:'list'},...p.reps.map(x=>{const[ic,lb,cls]=OUT[x.s]||['•',String(x.s),''];
+        const who=x.s==='open'||x.s==='ai'?'':x.by?` by ${x.by}`:'',vb=x.s==='resolved'&&x.validBy&&x.validBy!==x.by?` (validated by ${x.validBy})`:'';
+        return h('div',{className:'row a-'+cls},h('span',{className:'ic',textContent:ic}),
+          h('div',{className:'rb'},h('b',{textContent:`${lb}${who}${vb}`+(x.word?` · “${x.word}”`:'')}),h('div',{className:'msg'},hl(x.text||'',x.word))),
+          h('small',{className:'tm',textContent:x.t?when(x.t):'',title:x.t?new Date(x.t).toLocaleString():''}))}))))}
+  return row}
 function openZoom(src,onClose){
   const img=h('img',{src,draggable:false}),box=h('div',{id:'zm'});
   let sc=1,x=0,y=0,fit=1,drag=null;
@@ -781,7 +867,7 @@ async function loadHeads(ids){
       for(const id of chunk)HEAD[id]={u:'',t:Date.now()};
       for(const d of j.data||[])HEAD[d.targetId]={u:d.state==='Completed'&&/^https:\/\/[\w-]+\.rbxcdn\.com\//.test(d.imageUrl||'')?d.imageUrl:'',t:Date.now()}
     }
-    ls('heads',JSON.stringify(HEAD));render()
+    ls('heads',JSON.stringify(HEAD));if(!busy())render()
   }finally{headBusy=false}}
 
 const MARKS=[['open','Unchecked'],['noted','Noted'],['valid','Valid'],['ai','AI valid'],['resolved','Resolved'],['denied','Denied']];
@@ -911,6 +997,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['3.7','2026-10-27',['New Player records tab (view only): everyone who has been reported, including players whose reports were already handled and deleted','Filters: All, Validated, Denied. Search by name, @username, ID or message, and sort by latest, most validated, most time, most reports, most denied or name','Click a player for their Player info table (\uD83D\uDCCB Copy info) and every report with its outcome, who handled it and when','AI valid now counts as unchecked in player counts until a mod confirms it','Test reports from the Debug tab are kept out of Player records']],
   ['3.6.1','2026-10-27',['Removed Did you check the image: 👍 Valid works straight away again (the screenshot still opens full screen when you click it)']],
   ['3.6','2026-10-27',['Player info table on every player\u2019s page in A.F.R: display name, username, user ID, profile link, reports, validated, denied, unchecked and total time','\uD83D\uDCCB Copy info copies the whole table as text (pastes nicely into Discord), and each name, ID and link has its own Copy button','Counts include reports that were already handled and deleted']],
   ['3.5','2026-10-27',['Desktop notifications: turn them on in Profile settings and new reports pop up as a Windows notification while the dashboard is in the background. Click it to open the report','The dashboard keeps checking for new reports in the background, so the sound plays too (background tabs check about once a minute)','Report/Arrest Case: deltahub, 34 and 34r are now +5 Days']],
@@ -989,6 +1076,7 @@ const OBS=[
   {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in.','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','The line under the switch tells you whether the AI is online right now.']},
   {v:'launch',t:'Launcher',b:['Launch an account into the game in one click, or tick several and use Launch selected.','Pick bot accounts with the Bots button. Each bot shows whether it’s online, hopping servers or disconnected.','Auto-Call Bot when down relaunches a bot that disconnects or goes quiet for 2 minutes.','Only the Creator and Administrators can add or remove accounts.','Recent launches shows what was launched and whether it worked.']},
   {v:'hist',t:'History',b:['Every action anyone takes on a report: resolved, denied, valid, reopened and deleted.','Each line shows the player, their message, who did it and when.']},
+  {v:'plist',t:'Player records',b:['Everyone who has been reported, also after their reports were handled and deleted.','Filter by Validated or Denied, search by name, @username, ID or message, and sort by most validated, most time and more.','Click a player to see their info table (with \uD83D\uDCCB Copy info) and every report: what happened, who handled it, and when.','It\u2019s view only: nothing can be changed from this tab.']},
   {v:'brep',t:'Banned Reporters',b:['Reporters are the scanners that send reports in. Each has its own ID from the computer it runs on.','Block a scanner that sends false reports from the report panel (\uD83D\uDEAB Block this reporter) or from here. Only that scanner stops.','Check the ID before you press Unban so you unban the right one.']},
   {v:'all',t:'All profiles',b:['Everyone’s stats side by side, with Creator and Admin tags.','If someone hid their stats, you’ll see nil instead of numbers.']},
   {v:'prof',t:'Profile settings',b:['Set a profile picture, change your display name or password.','Hide my stats: other mods see nil instead of your numbers.','Reviewing: go to the next report automatically after marking one, play a sound when new reports come in, and get a desktop notification for them while the dashboard is in the background.','🧭 Replay onboarding starts this tour again.']},
@@ -1122,7 +1210,7 @@ function renderMod(main){
 const TEST_RID='dashboard-test';
 const ridOf=r=>r&&typeof r.reporter==='string'&&r.reporter!==TEST_RID&&/^[\w-]{4,40}$/.test(r.reporter)?r.reporter:null;
 const isBlocked=rid=>!!(rid&&BRP[rid]);
-const rFields=r=>({reporter:ridOf(r),reporterName:r?.reporterName??null});
+const rFields=r=>({reporter:ridOf(r),reporterName:r?.reporterName??null,...(r?.test?{test:true}:{})});
 const rOnline=x=>!!x?.seen&&Date.now()-x.seen<60000;
 async function loadReporters(){
   rptErr='';
@@ -1606,7 +1694,7 @@ async function loadInner(){
   try{SET=await api('/settings')||{}}catch{}
   try{NOTED=new Set(Object.keys(await api('/notes','GET',undefined,'shallow=true')||{}))}catch{}
   await loadHist();
-  if((view==='home'||view==='all')&&Date.now()-lastStats>60000)await loadStats();
+  if((view==='home'||view==='all'||view==='plist')&&Date.now()-lastStats>60000)await loadStats();
   if(view==='launch')await loadLauncher();
   if(sel&&!D[sel])closeSide();else if(!busy())render()}
 
