@@ -284,15 +284,6 @@ header button{padding:7px 10px}
 .rp b{font-weight:600}
 .tag.on{background:#1f9d55;color:#fff}
 /* ---- 3.2 Username colour check ---- */
-.cc{margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#0e1420;display:grid;gap:8px}
-.cc .ex{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.cc .sw2{width:22px;height:22px;border-radius:5px;border:1px solid #ffffff40;flex:none}
-.cc .chat{background:#000a;border-radius:4px;padding:4px 8px;font-weight:700;text-shadow:0 1px 1px #000}
-.cc .cb{display:flex;gap:8px;flex-wrap:wrap}
-.cc .cb button{flex:1 1 40%}
-.cc .cb button.on.ok{background:linear-gradient(135deg,#23a85e,#146b3b);border-color:#37c978}
-.cc .cb button.on.no{background:linear-gradient(135deg,#d24848,#8f2626);border-color:#e25b5b}
-.cc.need{border-color:#f0c04088}
 .bform{display:grid;gap:8px;margin-top:8px;padding:10px;border:1px solid #7a3434;border-radius:8px;background:#1e1214}
 .bform input:not([type=checkbox]){width:100%}
 .blk{margin-top:8px;width:100%}
@@ -625,7 +616,7 @@ function paintSide(){
   const r=D[sel];if(!r)return;
   const src=r.image||r.imageUrl||'';
   const img=/^(data:image\/|https:\/\/)/.test(src)
-    ?h('img',{className:'shot',src,referrerPolicy:'no-referrer',title:'Click to zoom',onclick:()=>openZoom(src,(k=>()=>imgSeen(k))(sel)),onerror(){this.replaceWith(h('div',{className:'noimg',textContent:'Image failed to load'}))}})
+    ?h('img',{className:'shot',src,referrerPolicy:'no-referrer',title:'Click to zoom',onclick:()=>openZoom(src),onerror(){this.replaceWith(h('div',{className:'noimg',textContent:'Image failed to load'}))}})
     :h('div',{className:'noimg',textContent:'Loading image...'});
   const f=(l,v,copy)=>h('div',{className:'f'},h('small',{textContent:l}),h('span',{className:'v',textContent:v??'-'}),
     copy&&v!=null&&v!==''?h('button',{className:'cp',textContent:'Copy',title:'Copy '+l.toLowerCase(),onclick:()=>copyText(v)}):'');
@@ -646,19 +637,18 @@ function paintSide(){
     ...(r.ai?[h('div',{className:'f'},h('small',{textContent:'AI check'}),h('div',{className:'m',textContent:`${String(r.ai.verdict).toUpperCase()}: ${r.ai.reason||''}`}))]:[]),
     sentBy(r),
     h('div',{className:'f'},h('small',{textContent:'Notes'}),notesBox(sel)),
-    imgCheck(r),
     h('div',{className:'acts'},sb('resolved','ok','✅ Resolved','Resolved'),sb('denied','no','❌ Denied','Denied'),
-      ((b)=>{if(needsImg(r)){b.disabled=true;b.title='Check the image first'}return b})(sb('valid',r.aiv?'va ai':'va','👍 Valid','Valid, can\u2019t act on it now'))),
+      sb('valid',r.aiv?'va ai':'va','👍 Valid','Valid, can\u2019t act on it now')),
     h('label',{className:'chk an'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking'),
     h('small',{id:'dl',className:'mu',textContent:pend[sel]?dlText(sel):''}),
     h('div',{className:'acts'},del,can),
     dlPicker((k=>()=>D[k]?[[k,D[k]]]:[])(sel),`report-${r.username||r.userId}-${sel}`,'⬇ Download report'),
-    h('small',{className:'keys'},'Shortcuts: ',kbd('I'),' check image  ',kbd('V'),' valid  ',kbd('R'),' resolved  ',kbd('D'),' denied  ',kbd('\u2190'),kbd('\u2192'),' previous/next  ',kbd('N'),' note  ',kbd('Esc'),' close'));
+    h('small',{className:'keys'},'Shortcuts: ',kbd('V'),' valid  ',kbd('R'),' resolved  ',kbd('D'),' denied  ',kbd('\u2190'),kbd('\u2192'),' previous/next  ',kbd('N'),' note  ',kbd('Esc'),' close'));
   paintSnav();
   if(!src){const id=sel;
     api('/images/'+id).then(d=>{
       const b=$('#side .noimg');if(sel!==id||!b)return;
-      if(typeof d==='string'&&d.startsWith('data:image/'))b.replaceWith(h('img',{className:'shot',src:d,title:'Click to zoom',onclick:()=>openZoom(d,()=>imgSeen(id))}));
+      if(typeof d==='string'&&d.startsWith('data:image/'))b.replaceWith(h('img',{className:'shot',src:d,title:'Click to zoom',onclick:()=>openZoom(d)}));
       else b.textContent='No image'
     }).catch(()=>{const b=$('#side .noimg');if(sel===id&&b)b.textContent='No image'})}}
 
@@ -704,29 +694,9 @@ function nameColor(name){
   const n=String(name||''),L=n.length;let v=0;
   for(let i=0;i<L;i++){let c=n.charCodeAt(i),rev=L-i;if(L%2===1)rev--;if(rev%4>=2)c=-c;v+=c}
   return NAME_COLORS[((v%8)+8)%8]}
-// Valid is locked until someone has opened the screenshot full screen (already-valid reports can still be un-marked)
-const needsImg=r=>!!r&&r.imgOk!==true&&!(r.status==='valid'&&!r.aiv);
-// Called when the full-screen image is closed: that report's image counts as checked, saved for everyone
-async function imgSeen(k){
-  const r=D[k];if(!r||r.imgOk===true)return;
-  const up={imgOk:true,imgBy:me.k,imgByName:P[me.k]?.displayName||me.k,imgAt:{'.sv':'timestamp'}};
-  Object.assign(r,up,{imgAt:Date.now()});if(sel===k)paintSide();
-  try{await api('/reports/'+k,'PATCH',up)}catch(e){Object.assign(r,{imgOk:null,imgBy:null,imgByName:null,imgAt:null});if(sel===k)paintSide();alert(e.message)}}
-function openShot(){
-  const im=$('#side img.shot');
-  if(!im)return toast($('#side .noimg')?.textContent==='Loading image...'?'The image is still loading.':'This report has no screenshot, so it can’t be checked.',{kind:'bad'});
-  im.click()}
-function imgCheck(r){
-  const ok=r.imgOk===true,noShot=!(r.image||r.imageUrl)&&$('#side .noimg')?.textContent==='No image';
-  return h('div',{className:'cc'+(needsImg(r)?' need':'')},
-    h('b',{textContent:'🖼 Did you check the image?'}),
-    ok?h('small',{className:'ok',textContent:`✓ Image checked by ${r.imgByName||r.imgBy||'someone'}${r.imgAt?' · '+ago(r.imgAt):''}`})
-      :h('small',{className:'mu',textContent:'Open the screenshot full screen and look at it. 👍 Valid unlocks when you close it.'}),
-    ...(ok?[]:[h('div',{className:'cb'},h('button',{className:'ok',textContent:'🖼 Open image',title:'Open the screenshot (I)',onclick:openShot}))]))}
 
 async function setStatus(st){
   const k=sel,r=D[k];if(!r)return;
-  if(st==='valid'&&needsImg(r))return toast('Check the image first: open the screenshot full screen (\uD83D\uDDBC Open image or I).',{kind:'bad'});
   const old=r.status,ai=r.aiv,v=old===st&&!ai?null:st;
   const prev={status:old??null,aiv:ai??null,validBy:r.validBy??null,validByName:r.validByName??null};
   // Work out the next report before marking, because marking can move this one out of the filtered list
@@ -941,6 +911,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['3.6.1','2026-10-27',['Removed Did you check the image: 👍 Valid works straight away again (the screenshot still opens full screen when you click it)']],
   ['3.6','2026-10-27',['Player info table on every player\u2019s page in A.F.R: display name, username, user ID, profile link, reports, validated, denied, unchecked and total time','\uD83D\uDCCB Copy info copies the whole table as text (pastes nicely into Discord), and each name, ID and link has its own Copy button','Counts include reports that were already handled and deleted']],
   ['3.5','2026-10-27',['Desktop notifications: turn them on in Profile settings and new reports pop up as a Windows notification while the dashboard is in the background. Click it to open the report','The dashboard keeps checking for new reports in the background, so the sound plays too (background tabs check about once a minute)','Report/Arrest Case: deltahub, 34 and 34r are now +5 Days']],
   ['3.4','2026-10-21',['The username colour check is replaced by \uD83D\uDDBC Did you check the image?','👍 Valid stays locked until someone opens the screenshot full screen and closes it again. Press I to open it','Shows who checked the image and when, for everyone']],
@@ -1012,7 +983,7 @@ const OBS=[
   {v:'home',hl:false,t:()=>`Welcome, ${P[me.k]?.displayName||me.k}!`,b:['This quick tour walks you through every tab and what it’s for.','Use Next and Back (or the arrow keys) to move around. Skip tour ends it.','You can replay it any time with the ? button at the top, or from Profile settings.']},
   {v:'home',t:'Main menu',b:['Messages from staff (broadcasts) show at the very top.','Needs attention: what\u2019s waiting right now. Click a card to jump straight to those reports.','Your stats: how many reports you’ve resolved, denied and marked valid, today, this month, this year and overall.','Reports overview: how many reports are open, handled, or marked valid by the AI.','Flagged words chart: which words get players flagged most. Switch between Reports and Users, and filter by status.','Recent activity: the latest actions taken by everyone.']},
   {v:'afr',t:'A.F.R: flagged players',b:['Every player whose chat got flagged gets a tile here. The number on the tab is how many reports are still open.','Each tile is coloured by its reports: the more reports with one status, the more of the tile that colour. The legend above the tiles shows what each colour means.','Find a player searches names, usernames, IDs and message text. Sort changes the order, for example Waiting longest. Filter shows only one word, one status, or reports that have notes.','Click a player to see all of their reports.']},
-  {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 10 seconds, so click the same button again to cancel.','🖼 Did you check the image? Open the screenshot full screen (click it, 🖼 Open image, or I). 👍 Valid unlocks once you close it.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).','After you mark a report, a notice at the bottom lets you Undo it.','Shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next report, N write a note, Esc close. Use \u2039 \u203A at the top of the panel to move between reports.']},
+  {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 10 seconds, so click the same button again to cancel.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).','After you mark a report, a notice at the bottom lets you Undo it.','Shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next report, N write a note, Esc close. Use \u2039 \u203A at the top of the panel to move between reports.']},
   {v:'afr',t:'Notes and downloads',b:['Notes: chat with the other mods about a report. Enter sends, Shift+Enter makes a new line. Paste, drop or 📎 a picture to attach it. You can delete your own notes.','⬇ Download report saves one report as a Zip or as an HTML Report/Arrest Case file.','On a player’s page, Download all valid grabs every valid report for that player.','Reports without a screenshot are left out of downloads.']},
   {v:'afr',t:'Export and Resolve all',b:['Export valid saves every valid report as a zip: a folder per player with the screenshots, plus a Report/Arrest Case file with the charges and total time required.','Resolve all valid marks every valid report as Resolved at once. They get deleted after 10 seconds, with a Cancel button at the top.','Tip: export first if you want to keep a copy.']},
   {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in.','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','The line under the switch tells you whether the AI is online right now.']},
@@ -1651,7 +1622,7 @@ addEventListener('keydown',e=>{
   if(e.key==='/'&&view==='afr'&&!user){e.preventDefault();$('#q').focus();return}
   if(!sel||!D[sel])return;
   const k=e.key.length===1?e.key.toLowerCase():e.key;
-  const act={i:openShot,v:()=>setStatus('valid'),r:()=>setStatus('resolved'),d:()=>setStatus('denied'),
+  const act={v:()=>setStatus('valid'),r:()=>setStatus('resolved'),d:()=>setStatus('denied'),
     ArrowRight:()=>stepSide(1),j:()=>stepSide(1),ArrowLeft:()=>stepSide(-1),k:()=>stepSide(-1),
     n:()=>$('#side .nin textarea')?.focus()}[k];
   if(act){e.preventDefault();act()}});
