@@ -1073,23 +1073,29 @@ const AI_SYSTEM='You help moderators review Roblox chat. A keyword filter flagge
   'Decide whether the message is a genuine problem (sexual or inappropriate content, coded or filter-bypassing slang '+
   'for it, sexual solicitation, harassment) or a false positive (the word used innocently, for example cooking, school '+
   'or ordinary conversation). Players often use innocent-looking words as coded slang, so judge the wording and the '+
-  'tone, not just the word. If you can’t tell, answer NO.\nReply in exactly this format:\nVERDICT: YES or NO\nREASON: one short sentence.';
+  'tone, not just the word. If a screenshot of the chat is attached, the flagged message is usually marked with a red box: '+
+  'use the messages around it for context (who it was said to, what they were talking about), but judge only the flagged message. '+
+  'If you can’t tell, answer NO.\nReply in exactly this format:\nVERDICT: YES or NO\nREASON: one short sentence.';
 const TAB_ID=Math.random().toString(36).slice(2,8);
 let AIS={runner:null,busy:false,last:0,pauseTill:0,err:'',errAt:0,done:0};
 const aiKeyOk=()=>/^sk-or-[\w-]{20,}$/.test(SET.orKey||'');
 const aiModel=()=>AI_MODEL;
 const myRunId=()=>`${me?.k}:${TAB_ID}`;
 const pyWorker=()=>!!SET.workerAt&&Math.abs(Date.now()-SET.workerAt)<60000;  // the old ai-assist.py is still running
-async function askAI(word,text){
+async function askAI(word,text,img){
+  const q=`Flagged word: ${word||''}\nMessage: ${text||''}`;
+  const content=img?[{type:'text',text:q+'\nA screenshot of the chat is attached.'},{type:'image_url',image_url:{url:img}}]:q;
   const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',
     headers:{'Authorization':'Bearer '+SET.orKey,'Content-Type':'application/json','X-Title':'Mod Reports'},
     body:JSON.stringify({model:aiModel(),temperature:0.1,max_tokens:600,
-      messages:[{role:'system',content:AI_SYSTEM},{role:'user',content:`Flagged word: ${word||''}\nMessage: ${text||''}`}]})});
+      messages:[{role:'system',content:AI_SYSTEM},{role:'user',content}]})});
   let j=null;try{j=await r.json()}catch{}
-  if(!r.ok){const m=j?.error?.message||('HTTP '+r.status);const e=new Error(m);e.status=r.status;throw e}
+  if(!r.ok){const m=j?.error?.message||('HTTP '+r.status);
+    if(img&&r.status===400&&/image|vision|multimodal|content/i.test(m))return askAI(word,text,null);  // model won't take the picture: text only
+    const e=new Error(m);e.status=r.status;throw e}
   const out=String(j?.choices?.[0]?.message?.content||'');
   const v=/VERDICT:\s*(YES|NO)/i.exec(out),why=/REASON:\s*([\s\S]+)/i.exec(out);
-  return{verdict:v?v[1].toLowerCase():'unsure',reason:(why?why[1]:out||'No answer').trim().slice(0,300)}}
+  return{verdict:v?v[1].toLowerCase():'unsure',reason:(why?why[1]:out||'No answer').trim().slice(0,300),img:!!img}}
 // Takes over the checking if no other open dashboard is doing it
 async function aiClaim(){
   let cur=null;try{cur=await api('/settings/aiRunner')}catch{}
@@ -1112,7 +1118,8 @@ async function aiTick(){
     if(!cur||cur.ai||cur.status){if(cur&&D[k])Object.assign(D[k],cur);if(!cur)delete D[k];return}
     AIS.last=Date.now();
     let res;
-    try{res=await askAI(cur.word,cur.text)}
+    const img=await shotSrc(k,cur);  // the screenshot, if the report has one
+    try{res=await askAI(cur.word,cur.text,img)}
     catch(e){
       AIS.err=e.message;AIS.errAt=Date.now();
       if(e.status===429)AIS.pauseTill=Date.now()+(/day|daily/i.test(e.message)?36e5:60000);
@@ -1121,7 +1128,7 @@ async function aiTick(){
       api('/settings','PATCH',{aiErr:e.message.slice(0,200),aiErrAt:{'.sv':'timestamp'}}).catch(()=>{});
       if(view==='ai'&&!busy())render();return}
     const again=await api('/reports/'+k);if(!again)return;  // deleted while the AI was thinking
-    const body={ai:{verdict:res.verdict,reason:res.reason,model:aiModel(),by:P[me.k]?.displayName||me.k,t:{'.sv':'timestamp'}}};
+    const body={ai:{verdict:res.verdict,reason:res.reason,model:aiModel(),img:!!res.img,by:P[me.k]?.displayName||me.k,t:{'.sv':'timestamp'}}};
     if(res.verdict==='yes'&&!again.status)Object.assign(body,{status:'valid',aiv:true});
     await api('/reports/'+k,'PATCH',body);
     if(D[k])Object.assign(D[k],body,{ai:{...body.ai,t:Date.now()}});
@@ -1162,7 +1169,7 @@ function renderAi(main){
   main.append(
     h('div',{className:'pc pset'},
       h('label',{className:'sw'},cb,h('span',{className:'knob'}),h('b',{textContent:'Auto-Check Assist'})),
-      h('small',{className:'mu',textContent:`When a new report arrives, the AI (${aiModel()}) checks it. If it says yes, the report is marked Valid in yellow. Only reports that arrive after you switch it on are checked.`}),
+      h('small',{className:'mu',textContent:`When a new report arrives, the AI (${aiModel()}) checks it, together with its screenshot. If it says yes, the report is marked Valid in yellow. Only reports that arrive after you switch it on are checked.`}),
       h('small',{className:status[0],textContent:status[1]}),
       ...(err&&!(Date.now()<AIS.pauseTill)?[h('small',{className:'bad',textContent:'Last error: '+err}),]:[])),
     ...(canManage()?[aiKeyBox()]:[]),
@@ -1252,6 +1259,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['4.1','2026-10-28',['AI Assist now sends the screenshot with each check, so the AI sees the chat around the flagged message','If the model won\u2019t take the picture, it checks the text only']],
   ['4.0.1','2026-10-28',['AI Assist now always uses Nemotron 3.5 Super VL (free). The model can no longer be changed from the dashboard']],
   ['4.0','2026-10-28',['AI Assist is built into the dashboard: new reports are checked through OpenRouter, no ai-assist.py or Ollama needed','The Creator or an Administrator saves the OpenRouter key (and optionally the model) on the AI Assist tab. It\u2019s kept in the database, not in the dashboard file','Only one open dashboard does the checking at a time, and it slows down by itself to stay inside the free limits','\uD83E\uDDEA Test the AI button, and clear messages when the key, the model or the free limit is the problem']],
   ['3.9.1','2026-10-28',['\uD83D\uDCCB Copy info waits for screenshots that are still uploading to the evidence channel, and posts any validated screenshot that isn\u2019t there yet, before copying']],
