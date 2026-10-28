@@ -646,7 +646,7 @@ function recStats(reps){
   return{total:reps.length,valid:reps.filter(isV).length,denied:reps.filter(x=>x.s==='denied').length,
     open:reps.filter(x=>x.s==='open'||x.s==='ai').length,time:dur(d,hr),hours:d*24+hr,noReason:[...noReason]}}
 // ---------- Evidence channel: validated screenshots posted to a private Discord channel (webhook) ----------
-// The webhook URL lives in /settings/evidenceHook (set in Profile settings by the Creator or an Administrator), never in this file.
+// The webhook URL lives in /settings/evidenceHook (set in Profile settings by the Creator only), never in this file.
 // Each validated report's screenshot is posted once; its message ID is saved on the report and in /players,
 // so Copy info can add links that embed in Discord even after the report itself is deleted.
 const HOOK_RE=/^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/;
@@ -705,9 +705,17 @@ async function freshShot(pid,k,shot){
     return url}catch{return null}}
 // Copy info: the table, then one link per validated screenshot (Discord shows them as images when pasted)
 async function copyInfo(text,p,btn){
-  const isV=x=>x.s==='valid'||x.s==='resolved',vs=(p.reps||[]).filter(isV),withShot=vs.filter(x=>x.shot?.mid);
+  const isV=x=>x.s==='valid'||x.s==='resolved',vs=(p.reps||[]).filter(isV);
   if(!vs.length)return copyText(text);
-  if(btn){btn.disabled=true;btn.textContent='Getting links...'}
+  const shotOf=x=>x.shot?.mid?x.shot:D[x.k]?.shot?.mid?D[x.k].shot:PLR?.[p.id]?.r?.[x.k]?.shot?.mid?PLR[p.id].r[x.k].shot:null;
+  // Wait for uploads still going, and post any validated screenshot that isn't in the channel yet
+  if(hookOn()){
+    const todo=vs.filter(x=>!shotOf(x)&&D[x.k]&&!D[x.k].test);
+    if(btn){btn.disabled=true;btn.textContent=todo.length||postEvidence.busy?.size?'Uploading screenshots...':'Getting links...'}
+    for(const x of todo)postEvidence(x.k,D[x.k]);
+    await evQ}
+  else if(btn){btn.disabled=true;btn.textContent='Getting links...'}
+  const withShot=vs.map(x=>({...x,shot:shotOf(x)})).filter(x=>x.shot);
   const lines=[];let i=0;
   for(const x of withShot){const u=await freshShot(p.id,x.k,x.shot);if(u)lines.push(`${++i}. “${x.word||'?'}” · ${x.t?new Date(x.t).toLocaleDateString():''}\n${u}`)}
   const miss=vs.length-i;
@@ -716,7 +724,7 @@ async function copyInfo(text,p,btn){
 async function openShot(pid,k,shot){
   const w=window.open('about:blank','_blank');const u=await freshShot(pid,k,shot);
   if(u&&w)w.location=u;else{if(w)w.close();toast('That screenshot isn’t available anymore.',{kind:'bad'})}}
-// Profile settings box (Creator and Administrators)
+// Profile settings box (Creator only)
 function evidenceBox(){
   const inp=h('input',{type:'text',placeholder:'https://discord.com/api/webhooks/...',autocomplete:'off',spellcheck:false,value:''});inp.setAttribute('data-lpignore','true');
   const save=h('button',{textContent:'Save webhook'});
@@ -1152,7 +1160,9 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
-  ['3.9','2026-10-28',['Evidence channel: connect a private Discord channel with a webhook (Profile settings, Creator and Administrators). Screenshots of reports marked Valid or Resolved are posted there automatically','\uD83D\uDCCB Copy info now adds a link to every validated screenshot after the table, so they show as images when pasted in Discord, even after the report was deleted','Links are refreshed when needed, since Discord image links expire after a day','Player records: \uD83D\uDDBC opens a validated report\u2019s screenshot']],
+  ['3.9.1','2026-10-28',['\uD83D\uDCCB Copy info waits for screenshots that are still uploading to the evidence channel, and posts any validated screenshot that isn\u2019t there yet, before copying']],
+  ['3.9.1','2026-10-28',['Only the Creator can set or disconnect the evidence channel webhook']],
+  ['3.9','2026-10-28',['Evidence channel: connect a private Discord channel with a webhook (Profile settings, Creator only). Screenshots of reports marked Valid or Resolved are posted there automatically','\uD83D\uDCCB Copy info now adds a link to every validated screenshot after the table, so they show as images when pasted in Discord, even after the report was deleted','Links are refreshed when needed, since Discord image links expire after a day','Player records: \uD83D\uDDBC opens a validated report\u2019s screenshot']],
   ['3.8','2026-10-27',['Player records now comes from a players list saved in Firebase (/players), kept up to date every time a report is handled, so it opens instantly','The list sets itself up from History the first time someone opens Player records. The Creator can rebuild it from the Debug tab','Search in: Everything, Display name, Username or User ID']],
   ['3.7','2026-10-27',['New Player records tab (view only): everyone who has been reported, including players whose reports were already handled and deleted','Filters: All, Validated, Denied. Search by name, @username, ID or message, and sort by latest, most validated, most time, most reports, most denied or name','Click a player for their Player info table (\uD83D\uDCCB Copy info) and every report with its outcome, who handled it and when','AI valid now counts as unchecked in player counts until a mod confirms it','Test reports from the Debug tab are kept out of Player records']],
   ['3.6.1','2026-10-27',['Removed Did you check the image: 👍 Valid works straight away again (the screenshot still opens full screen when you click it)']],
@@ -1626,7 +1636,7 @@ function renderProf(main){
         const v=!e.target.checked;try{await api('/settings','PATCH',{creatorUnprotected:v});SET.creatorUnprotected=v;render()}catch(er){alert(er.message);e.target.checked=!v}}}),
         h('span',{className:'knob'}),h('span',{textContent:'Protect me from Administrator actions'})),
       h('small',{className:'mu',textContent:'When off, Administrators can act on your profile like anyone else’s.'})]:[]),
-    ...(canManage()?evidenceBox():[]),
+    ...(isCreator(me.k)?evidenceBox():[]),
     h('b',{textContent:'Reviewing'}),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking one'),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:ls('ping')==='1',onchange:e=>{ls('ping',e.target.checked?'1':'0');if(e.target.checked)ping()}}),'Play a sound when new reports come in'),
