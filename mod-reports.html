@@ -348,7 +348,7 @@ const h=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);e.a
 let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={},B={},W={},ML={},modErr='',modOpen=null,loading=false,loaded=false,lastLoad=0,stBad=false,seenKeys=null,hf={a:'all',mine:false,q:''},RPT={},BRP={},BRL={},brOpen=null,brq='',rptErr='';
 
 const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',plist:'Player records',brep:'Banned Reporters',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation',dbg:'Debug'};
-const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with gpt-oss'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['plist','Player records','Everyone who\u2019s been reported'],['brep','Banned Reporters','Scanners blocked from reporting'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed'],['dbg','Debug','Creator only: test reports']];
+const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with AI'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['plist','Player records','Everyone who\u2019s been reported'],['brep','Banned Reporters','Scanners blocked from reporting'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed'],['dbg','Debug','Creator only: test reports']];
 // Tabs only the Creator and Administrators can see or open
 const STAFF=new Set(['bc','mod']);
 // Tabs only the Creator can see or open
@@ -1064,16 +1064,108 @@ function paintFlt(anim){
 function zoom(l){const p=$('#fw .pop');if(p)p.classList.add('zout');setTimeout(()=>{fLvl=l;paintFlt(true)},170)}
 function pick(t,v){flt={type:t,val:v};fOpen=false;render();paintFlt()}
 
-async function setAcs(v){try{await api('/settings','PATCH',{acs:v,acsAt:{'.sv':'timestamp'}});SET.acs=v;render()}catch(e){alert(e.message)}}
+// ---------- AI Assist, built in: checks new reports through OpenRouter, right from the dashboard ----------
+// The key is saved in /settings/orKey (set on this tab by the Creator or an Administrator), never in this file.
+// Only one open dashboard does the checking at a time (/settings/aiRunner), so reports aren't checked twice.
+// The model is fixed here on purpose (it can't be changed from the dashboard)
+const AI_MODEL='nvidia/nemotron-3.5-super-vl:free';
+const AI_SYSTEM='You help moderators review Roblox chat. A keyword filter flagged a message because it contains a watched word. '+
+  'Decide whether the message is a genuine problem (sexual or inappropriate content, coded or filter-bypassing slang '+
+  'for it, sexual solicitation, harassment) or a false positive (the word used innocently, for example cooking, school '+
+  'or ordinary conversation). Players often use innocent-looking words as coded slang, so judge the wording and the '+
+  'tone, not just the word. If you can’t tell, answer NO.\nReply in exactly this format:\nVERDICT: YES or NO\nREASON: one short sentence.';
+const TAB_ID=Math.random().toString(36).slice(2,8);
+let AIS={runner:null,busy:false,last:0,pauseTill:0,err:'',errAt:0,done:0};
+const aiKeyOk=()=>/^sk-or-[\w-]{20,}$/.test(SET.orKey||'');
+const aiModel=()=>AI_MODEL;
+const myRunId=()=>`${me?.k}:${TAB_ID}`;
+const pyWorker=()=>!!SET.workerAt&&Math.abs(Date.now()-SET.workerAt)<60000;  // the old ai-assist.py is still running
+async function askAI(word,text){
+  const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',
+    headers:{'Authorization':'Bearer '+SET.orKey,'Content-Type':'application/json','X-Title':'Mod Reports'},
+    body:JSON.stringify({model:aiModel(),temperature:0.1,max_tokens:600,
+      messages:[{role:'system',content:AI_SYSTEM},{role:'user',content:`Flagged word: ${word||''}\nMessage: ${text||''}`}]})});
+  let j=null;try{j=await r.json()}catch{}
+  if(!r.ok){const m=j?.error?.message||('HTTP '+r.status);const e=new Error(m);e.status=r.status;throw e}
+  const out=String(j?.choices?.[0]?.message?.content||'');
+  const v=/VERDICT:\s*(YES|NO)/i.exec(out),why=/REASON:\s*([\s\S]+)/i.exec(out);
+  return{verdict:v?v[1].toLowerCase():'unsure',reason:(why?why[1]:out||'No answer').trim().slice(0,300)}}
+// Takes over the checking if no other open dashboard is doing it
+async function aiClaim(){
+  let cur=null;try{cur=await api('/settings/aiRunner')}catch{}
+  const mine=myRunId(),stale=!cur||!cur.at||Date.now()-cur.at>35000;
+  if(cur&&cur.by===mine||stale){
+    try{await api('/settings/aiRunner','PUT',{by:mine,name:P[me.k]?.displayName||me.k,at:{'.sv':'timestamp'}});cur={by:mine,name:P[me.k]?.displayName||me.k,at:Date.now()}}catch{}}
+  AIS.runner=cur;return!!cur&&cur.by===mine}
+function aiNext(){
+  const cut=SET.acsAt||0;
+  return Object.keys(D).sort().find(k=>{const r=D[k];return r&&!r.ai&&!r.status&&pushTime(k)>=cut&&!AIS.skip?.has(k)})}
+async function aiTick(){
+  if(!me||!SET.acs||!aiKeyOk()||pyWorker()||AIS.busy)return;
+  if(Date.now()<AIS.pauseTill)return;
+  AIS.busy=true;
+  try{
+    if(!await aiClaim())return;
+    const k=aiNext();if(!k)return;
+    if(Date.now()-AIS.last<3500)return;  // free models allow about 20 checks a minute
+    const cur=await api('/reports/'+k);
+    if(!cur||cur.ai||cur.status){if(cur&&D[k])Object.assign(D[k],cur);if(!cur)delete D[k];return}
+    AIS.last=Date.now();
+    let res;
+    try{res=await askAI(cur.word,cur.text)}
+    catch(e){
+      AIS.err=e.message;AIS.errAt=Date.now();
+      if(e.status===429)AIS.pauseTill=Date.now()+(/day|daily/i.test(e.message)?36e5:60000);
+      else if(e.status===401||e.status===402||e.status===403)AIS.pauseTill=Date.now()+5*60000;
+      else (AIS.skip??=new Set()).add(k);  // one odd report shouldn't block the rest
+      api('/settings','PATCH',{aiErr:e.message.slice(0,200),aiErrAt:{'.sv':'timestamp'}}).catch(()=>{});
+      if(view==='ai'&&!busy())render();return}
+    const again=await api('/reports/'+k);if(!again)return;  // deleted while the AI was thinking
+    const body={ai:{verdict:res.verdict,reason:res.reason,model:aiModel(),by:P[me.k]?.displayName||me.k,t:{'.sv':'timestamp'}}};
+    if(res.verdict==='yes'&&!again.status)Object.assign(body,{status:'valid',aiv:true});
+    await api('/reports/'+k,'PATCH',body);
+    if(D[k])Object.assign(D[k],body,{ai:{...body.ai,t:Date.now()}});
+    AIS.err='';AIS.done++;
+    if(SET.aiErr)api('/settings','PATCH',{aiErr:null}).then(()=>{delete SET.aiErr}).catch(()=>{});
+    if(!busy())render()
+  }catch{}finally{AIS.busy=false}}
+setInterval(aiTick,5000);
+async function setAcs(v){try{await api('/settings','PATCH',{acs:v,acsAt:{'.sv':'timestamp'}});SET.acs=v;SET.acsAt=Date.now();render()}catch(e){alert(e.message)}}
+function aiKeyBox(){
+  const key=h('input',{type:'text',placeholder:aiKeyOk()?'Paste a new key to replace it':'sk-or-v1-...',autocomplete:'off',spellcheck:false});key.setAttribute('data-lpignore','true');
+  const save=h('button',{textContent:'Save'});
+  save.onclick=async()=>{const k=key.value.trim();if(!k)return toast('Paste the key first.',{kind:'bad'});
+    if(k&&!/^sk-or-[\w-]{20,}$/.test(k))return toast('That doesn’t look like an OpenRouter key (it starts with sk-or-).',{kind:'bad'});
+    const up={orKey:k,aiModel:null};
+    save.disabled=true;try{await api('/settings','PATCH',up);Object.assign(SET,up);delete SET.aiModel;AIS.pauseTill=0;toast('Saved',{kind:'ok'});render()}catch(e){alert(e.message);save.disabled=false}};
+  const test=h('button',{textContent:'🧪 Test the AI',disabled:!aiKeyOk()});
+  test.onclick=async()=>{test.disabled=true;test.textContent='Asking...';
+    try{const r=await askAI('corn','bro send corn pls');toast(`AI works (${aiModel()}): ${r.verdict.toUpperCase()}, ${r.reason}`,{kind:'ok',ms:9000})}
+    catch(e){toast('The AI didn’t answer: '+e.message,{kind:'bad',ms:9000})}
+    test.disabled=false;test.textContent='🧪 Test the AI'};
+  return h('div',{className:'pc pset',style:'max-width:560px;margin-top:14px'},h('b',{textContent:'OpenRouter (Creator and Administrators)'}),
+    h('small',{className:'mu',textContent:aiKeyOk()?`Key saved (ends in …${SET.orKey.slice(-4)}). It’s kept in the database, not in the dashboard file.`:'Paste your OpenRouter API key. It’s kept in the database, not in the dashboard file, so it never ends up on GitHub.'}),
+    key,h('small',{className:'mu',textContent:'Model: '+AI_MODEL}),
+    h('div',{className:'mform'},save,test))}
 function renderAi(main){
-  const on=!!SET.acs,online=SET.workerAt&&Math.abs(Date.now()-SET.workerAt)<60000;
+  const on=!!SET.acs,rn=AIS.runner,runnerOn=rn&&rn.at&&Date.now()-rn.at<35000,mine=rn&&rn.by===myRunId();
   const rs=Object.entries(D).filter(([k,r])=>r.ai).sort((a,b)=>a[0]<b[0]?1:-1),cnt=v=>rs.filter(([k,r])=>r.ai.verdict===v).length;
+  const waiting=Object.keys(D).filter(k=>{const r=D[k];return!r.ai&&!r.status&&pushTime(k)>=(SET.acsAt||0)}).length;
   const cb=h('input',{type:'checkbox',checked:on,onchange:e=>setAcs(e.target.checked)});
+  const err=AIS.err||(SET.aiErr&&SET.aiErrAt&&Date.now()-SET.aiErrAt<36e5?SET.aiErr:'');
+  const status=!aiKeyOk()?['bad','No OpenRouter key yet. The Creator or an Administrator adds it below.']
+    :pyWorker()?['bad','ai-assist.py is still running somewhere. Close it: the dashboard does the checks itself now.']
+    :!on?['mu','Off.']
+    :Date.now()<AIS.pauseTill?['bad',`Paused until ${new Date(AIS.pauseTill).toLocaleTimeString()}: ${AIS.err}`]
+    :runnerOn?['ok',mine?`Checking here, in this dashboard${waiting?` · ${waiting} waiting`:''}.`:`Checking in ${rn.name||'another mod'}’s dashboard.`]
+    :['mu','Starts checking within a few seconds. Someone has to have the dashboard open (a background tab is fine, it’s just slower).'];
   main.append(
     h('div',{className:'pc pset'},
       h('label',{className:'sw'},cb,h('span',{className:'knob'}),h('b',{textContent:'Auto-Check Assist'})),
-      h('small',{className:'mu',textContent:'When a new report arrives, gpt-oss checks it. If it says yes, the report is marked Valid in yellow.'}),
-      h('small',{className:online?'ok':'bad',textContent:online?'Worker online':'Worker offline. Run ai-assist.py on the PC that has Ollama.'})),
+      h('small',{className:'mu',textContent:`When a new report arrives, the AI (${aiModel()}) checks it. If it says yes, the report is marked Valid in yellow. Only reports that arrive after you switch it on are checked.`}),
+      h('small',{className:status[0],textContent:status[1]}),
+      ...(err&&!(Date.now()<AIS.pauseTill)?[h('small',{className:'bad',textContent:'Last error: '+err}),]:[])),
+    ...(canManage()?[aiKeyBox()]:[]),
     h('h2',{className:'sec',textContent:'Results'}),
     h('div',{className:'grid stats mini'},...[['Checked',rs.length,''],['Said yes',cnt('yes'),'y'],['Said no',cnt('no'),'r']]
       .map(([l,v,c])=>h('div',{className:'stat '+c},h('div',{className:'n',textContent:v}),h('small',{textContent:l})))),
@@ -1160,6 +1252,8 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['4.0.1','2026-10-28',['AI Assist now always uses Nemotron 3.5 Super VL (free). The model can no longer be changed from the dashboard']],
+  ['4.0','2026-10-28',['AI Assist is built into the dashboard: new reports are checked through OpenRouter, no ai-assist.py or Ollama needed','The Creator or an Administrator saves the OpenRouter key (and optionally the model) on the AI Assist tab. It\u2019s kept in the database, not in the dashboard file','Only one open dashboard does the checking at a time, and it slows down by itself to stay inside the free limits','\uD83E\uDDEA Test the AI button, and clear messages when the key, the model or the free limit is the problem']],
   ['3.9.1','2026-10-28',['\uD83D\uDCCB Copy info waits for screenshots that are still uploading to the evidence channel, and posts any validated screenshot that isn\u2019t there yet, before copying']],
   ['3.9.1','2026-10-28',['Only the Creator can set or disconnect the evidence channel webhook']],
   ['3.9','2026-10-28',['Evidence channel: connect a private Discord channel with a webhook (Profile settings, Creator only). Screenshots of reports marked Valid or Resolved are posted there automatically','\uD83D\uDCCB Copy info now adds a link to every validated screenshot after the table, so they show as images when pasted in Discord, even after the report was deleted','Links are refreshed when needed, since Discord image links expire after a day','Player records: \uD83D\uDDBC opens a validated report\u2019s screenshot']],
@@ -1240,7 +1334,7 @@ const OBS=[
   {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 10 seconds, so click the same button again to cancel.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).','After you mark a report, a notice at the bottom lets you Undo it.','Shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next report, N write a note, Esc close. Use \u2039 \u203A at the top of the panel to move between reports.']},
   {v:'afr',t:'Notes and downloads',b:['Notes: chat with the other mods about a report. Enter sends, Shift+Enter makes a new line. Paste, drop or 📎 a picture to attach it. You can delete your own notes.','⬇ Download report saves one report as a Zip or as an HTML Report/Arrest Case file.','On a player’s page, Download all valid grabs every valid report for that player.','Reports without a screenshot are left out of downloads.']},
   {v:'afr',t:'Export and Resolve all',b:['Export valid saves every valid report as a zip: a folder per player with the screenshots, plus a Report/Arrest Case file with the charges and total time required.','Resolve all valid marks every valid report as Resolved at once. They get deleted after 10 seconds, with a Cancel button at the top.','Tip: export first if you want to keep a copy.']},
-  {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in.','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','The line under the switch tells you whether the AI is online right now.']},
+  {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in, right from the dashboard (no extra program needed).','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','Someone needs to have the dashboard open for checks to happen. Only one open dashboard does the checking at a time.']},
   {v:'launch',t:'Launcher',b:['Launch an account into the game in one click, or tick several and use Launch selected.','Pick bot accounts with the Bots button. Each bot shows whether it’s online, hopping servers or disconnected.','Auto-Call Bot when down relaunches a bot that disconnects or goes quiet for 2 minutes.','Only the Creator and Administrators can add or remove accounts.','Recent launches shows what was launched and whether it worked.']},
   {v:'hist',t:'History',b:['Every action anyone takes on a report: resolved, denied, valid, reopened and deleted.','Each line shows the player, their message, who did it and when.']},
   {v:'plist',t:'Player records',b:['Everyone who has been reported, also after their reports were handled and deleted. It comes from the players list saved in Firebase, so it opens instantly.','Filter by Validated or Denied. Pick what to search in (everything, display name, username or user ID) and sort by most validated, most time and more.','Click a player to see their info table (with \uD83D\uDCCB Copy info) and every report: what happened, who handled it, and when.','It\u2019s view only: nothing can be changed from this tab.']},
