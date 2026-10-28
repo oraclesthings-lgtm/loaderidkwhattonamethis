@@ -397,6 +397,7 @@ async function loadHist(){
 async function log(action,r,k){
   try{
     await api('/history','POST',{action,reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,...rFields(r),by:me.k,byName:P[me.k]?.displayName??me.k,t:{'.sv':'timestamp'}});
+    savePlayers(playerPatch(r,k,action,meBy()));
     await loadHist();render()
   }catch{}}
 
@@ -406,7 +407,7 @@ function groups(ff){
   return Object.entries(m).map(([id,list])=>{list.sort((a,b)=>a.k<b.k?1:-1);return{id,list,name:list[0].displayName,user:list[0].username}})
     .sort((a,b)=>a.list[0].k<b.list[0].k?1:-1)}
 
-function go(v){const fromPlayer=view==='afr'&&v==='afr'&&user!=null;view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(fromPlayer)restoreGridY();else window.scrollTo(0,0);if(st)loadStats().then(render);if(v==='mod')loadMod().then(render);if(v==='plist'){plOpen=null;loadStats().then(()=>{if(view==='plist'&&!busy())render()})}if(v==='brep'){brOpen=null;Promise.all([loadReporters(),loadBrep()]).then(render)}if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
+function go(v){const fromPlayer=view==='afr'&&v==='afr'&&user!=null;view=v;user=null;const st=v==='home'||v==='all';if(st)lastStats=0;closeSide();if(fromPlayer)restoreGridY();else window.scrollTo(0,0);if(st)loadStats().then(render);if(v==='mod')loadMod().then(render);if(v==='plist'){plOpen=null;loadPlayers(true).then(()=>!plErr&&!SET.playersBuilt?buildPlayers(false):usingList()?0:loadStats()).then(()=>{if(view==='plist'&&!busy())render()})}if(v==='brep'){brOpen=null;Promise.all([loadReporters(),loadBrep()]).then(render)}if(v==='launch'){lAnim=true;loadLauncher().then(()=>{render();lAnim=false})}}
 function paintNav(){
   const open=Object.values(D).filter(r=>!r.status).length;
   document.title=open?`(${open}) Mod Reports`:'Mod Reports';
@@ -526,8 +527,8 @@ function histList(n,pred){
 // Remembers where the players list was scrolled to, so Back lands on the same spot instead of the top
 let gridY=0;
 function openPlayer(id){gridY=window.scrollY;user=id;render();window.scrollTo(0,0);
-  // the info card counts handled reports from the full history
-  if(Date.now()-lastStats>60000)loadStats().then(()=>{if(user===id&&!busy())render()})}
+  // the info card counts handled reports from the players list (or the full History until that list exists)
+  (SET.playersBuilt?loadPlayers():Date.now()-lastStats>60000?loadStats():Promise.resolve(0)).then(x=>{if(x!==0&&user===id&&!busy())render()})}
 function backToGrid(){user=null;render();restoreGridY()}
 function restoreGridY(){const y=gridY;window.scrollTo(0,y);requestAnimationFrame(()=>window.scrollTo(0,y))}
 const SORTS=[['new','Newest report first'],['wait','Waiting longest'],['open','Most unchecked'],['most','Most reports'],['name','Name A\u2013Z']];
@@ -564,19 +565,73 @@ function renderAfr(main){
 // ---------- Player records: every reported player, from History + the open reports (view only) ----------
 // One entry per report: its latest outcome, rebuilt from History (handled reports are deleted, History keeps them)
 const isTestEntry=e=>!!e&&(e.test===true||DBG_PEOPLE.some(p=>String(p[0])===String(e.userId)));
+// ---------- The players list in Firebase (/players) ----------
+// /players/<userId>: {name, user, uid, last, r:{<reportId>:{s, word, text, by, validBy, t, at}}}
+// Every time a report is handled, that report's entry is written again with its latest outcome, so the list can't drift.
+// Built once from History (first time someone opens Player records); after that the tab reads this one list.
+let PLR=null,plAt=0,plErr='',plBuilding=false;
+const pidOf=r=>{const p=String(r?.userId??r?.username??'');return /^[^.#$\[\]\/]{1,60}$/.test(p)?p:null};
+const realT=(k,t)=>{const p=pushTime(k);return p>1e12?p:(t||0)};
+// The multi-path update for one report's new outcome (empty for test reports)
+function playerPatch(r,k,action,by){
+  const pid=pidOf(r);if(!r||r.test||!pid||!k)return{};
+  const b=pid+'/',e={s:action==='cleared'?'open':action,word:r.word??null,text:r.text??null,by:by?.byName||by?.by||null,t:realT(k)||Date.now(),at:{'.sv':'timestamp'}};
+  const vb=action==='valid'?(by?.byName||by?.by):(r.validByName||r.validBy);if(vb)e.validBy=vb;
+  const o={[b+'last']:{'.sv':'timestamp'}};for(const f in e)o[b+'r/'+k+'/'+f]=e[f];if(r.shot)o[b+'r/'+k+'/shot']=r.shot;
+  if(r.displayName)o[b+'name']=r.displayName;if(r.username)o[b+'user']=r.username;if(r.userId!=null)o[b+'uid']=r.userId;
+  return o}
+async function savePlayers(o){if(!Object.keys(o).length)return;try{await api('/players','PATCH',o);plAt=0}catch(e){plErr=e.message}}
+const meBy=()=>({by:me.k,byName:P[me.k]?.displayName||me.k});
+async function loadPlayers(force){
+  if(!force&&PLR&&Date.now()-plAt<60000)return;
+  try{PLR=await api('/players')||{};plErr='';plAt=Date.now()}catch(e){plErr=e.message;PLR=null}}
+// One-time build (or a full rebuild from the Debug tab): works the list out from the whole History and saves it
+async function buildPlayers(manual){
+  if(plBuilding||(!manual&&SET.playersBuilt))return;
+  plBuilding=true;
+  try{
+    toast(manual?'Rebuilding the players list from History...':'Setting up the players list from History (only this once)...',{ms:4000});
+    HA=await api('/history')||{};lastStats=Date.now();
+    const rep=histRep(true,HA),out={};
+    for(const x of Object.values(rep)){if(!x.pid||!/^[^.#$\[\]\/]{1,60}$/.test(x.pid))continue;
+      const p=out[x.pid]??={r:{}};
+      p.r[x.k]={s:x.s,word:x.word??null,text:x.text??null,by:x.by??null,...(x.validBy?{validBy:x.validBy}:{}),t:x.t||0,at:x.at||0};
+      if(x.name)p.name=x.name;if(x.user)p.user=x.user;if(x.uid!=null)p.uid=x.uid;p.last=Math.max(p.last||0,x.t||0,x.at||0)}
+    // keep screenshot links already saved
+    try{const old=await api('/players')||{};for(const pid in out)for(const k in out[pid].r){const sh=old[pid]?.r?.[k]?.shot;if(sh)out[pid].r[k].shot=sh}}catch{}
+    await api('/players','PUT',out);
+    await api('/settings','PATCH',{playersBuilt:true,playersBuiltAt:{'.sv':'timestamp'}});
+    SET.playersBuilt=true;SET.playersBuiltAt=Date.now();
+    await loadPlayers(true);
+    toast(`Players list ready: ${Object.keys(out).length} player${Object.keys(out).length!==1?'s':''}`,{kind:'ok'})
+  }catch(e){plErr=e.message;toast('Couldn’t save the players list: '+e.message+'. Add the /players rule in Firebase.',{kind:'bad',ms:9000})}
+  finally{plBuilding=false;if(!busy())render()}}
+// History -> one entry per report with its latest outcome
+function applyHist(rep,e){
+  const x=rep[e.reportId]??={k:e.reportId,t:realT(e.reportId,e.t)};
+  Object.assign(x,{pid:String(e.userId??e.username),s:e.action==='cleared'?'open':e.action,by:e.byName||e.by||null,at:e.t||null});
+  if(e.displayName)x.name=e.displayName;if(e.username)x.user=e.username;if(e.userId!=null)x.uid=e.userId;
+  if(e.word)x.word=e.word;if(e.text)x.text=e.text;if(e.action==='valid')x.validBy=e.byName||e.by||null}
+const histOk=(e,noTests)=>!!e&&!!e.reportId&&(e.userId!=null||!!e.username)&&!(noTests&&isTestEntry(e));
+function histRep(noTests,src){
+  const rep={};for(const id of Object.keys(src).sort()){const e=src[id];if(histOk(e,noTests))applyHist(rep,e)}return rep}
+const usingList=()=>!!(PLR&&SET.playersBuilt);
 function playerRecords(noTests){
-  const all={...HA,...H},rep={},realT=(k,t)=>{const p=pushTime(k);return p>1e12?p:(t||0)};
-  for(const id of Object.keys(all).sort()){const e=all[id];
-    if(!e||!e.reportId||(e.userId==null&&!e.username)||(noTests&&isTestEntry(e)))continue;
-    const x=rep[e.reportId]??={k:e.reportId,t:realT(e.reportId,e.t)};
-    Object.assign(x,{pid:String(e.userId??e.username),s:e.action==='cleared'?'open':e.action,by:e.byName||e.by||null,at:e.t||null});
-    if(e.displayName)x.name=e.displayName;if(e.username)x.user=e.username;if(e.userId!=null)x.uid=e.userId;
-    if(e.word)x.word=e.word;if(e.text)x.text=e.text;if(e.action==='valid')x.validBy=e.byName||e.by||null}
+  let rep;
+  if(usingList()){
+    rep={};
+    for(const[pid,p]of Object.entries(PLR)){if(!p||!p.r)continue;
+      for(const[k,x]of Object.entries(p.r)){if(!x)continue;
+        rep[k]={k,pid,s:x.s||'open',word:x.word,text:x.text,by:x.by||null,validBy:x.validBy||null,t:x.t||realT(k),at:x.at||0,name:p.name,user:p.user,uid:p.uid,shot:x.shot||null}}}
+    // anything handled since the list was fetched comes in through the recent History (refreshed every 20 s)
+    for(const id of Object.keys(H).sort()){const e=H[id];if(!histOk(e,noTests))continue;
+      const x=rep[e.reportId];if(x&&(e.t||0)<=(x.at||0))continue;applyHist(rep,e)}
+  }else rep=histRep(noTests,{...HA,...H});
   for(const k in D){const r=D[k];if(noTests&&r.test)continue;
     const x=rep[k]??={k,t:realT(k)};
     Object.assign(x,{pid:String(r.userId??r.username),s:r.aiv?'ai':(r.status||'open'),live:true,
       name:r.displayName??x.name,user:r.username??x.user,uid:r.userId??x.uid,word:r.word??x.word,text:r.text??x.text});
-    if(r.validByName||r.validBy)x.validBy=r.validByName||r.validBy}
+    if(r.validByName||r.validBy)x.validBy=r.validByName||r.validBy;if(r.shot)x.shot=r.shot}
   const out={};
   for(const x of Object.values(rep)){(out[x.pid]??={id:x.pid,reps:[]}).reps.push(x)}
   for(const p of Object.values(out)){
@@ -590,6 +645,96 @@ function recStats(reps){
   for(const x of reps.filter(isV)){const R=REASONS[String(x.word||'').toLowerCase()];if(R){d+=R[1];hr+=R[2]}else noReason.add(x.word||'?')}
   return{total:reps.length,valid:reps.filter(isV).length,denied:reps.filter(x=>x.s==='denied').length,
     open:reps.filter(x=>x.s==='open'||x.s==='ai').length,time:dur(d,hr),hours:d*24+hr,noReason:[...noReason]}}
+// ---------- Evidence channel: validated screenshots posted to a private Discord channel (webhook) ----------
+// The webhook URL lives in /settings/evidenceHook (set in Profile settings by the Creator or an Administrator), never in this file.
+// Each validated report's screenshot is posted once; its message ID is saved on the report and in /players,
+// so Copy info can add links that embed in Discord even after the report itself is deleted.
+const HOOK_RE=/^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/;
+const hookOn=()=>HOOK_RE.test(SET.evidenceHook||'');
+const FRESH=20*36e5;  // Discord image links stop working outside Discord after ~24 h, so refresh after 20 h
+async function hookFetch(url,o){
+  for(let i=0;i<6;i++){
+    const r=await fetch(url,o);
+    if(r.status===429){let w=1;try{w=(await r.json()).retry_after||1}catch{}await new Promise(z=>setTimeout(z,Math.min(10,w)*1000+150));continue}
+    if(!r.ok)throw new Error(`Discord said HTTP ${r.status}${r.status===404?' (the webhook was deleted?)':''}`);
+    return r}
+  throw new Error('Discord is busy (rate limit), try again in a moment')}
+function dataUrlBlob(d){
+  const m=/^data:([^;,]+)(;base64)?,(.*)$/s.exec(d||'');if(!m)return null;
+  const bin=m[2]?atob(m[3]):decodeURIComponent(m[3]),a=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:m[1]})}
+// Starts grabbing the screenshot right away (a resolved report's image is deleted 10 s later)
+function shotSrc(k,r){
+  const s=r.image||r.imageUrl;
+  return typeof s==='string'&&s.startsWith('data:image/')?Promise.resolve(s):api('/images/'+k).then(d=>typeof d==='string'&&d.startsWith('data:image/')?d:null).catch(()=>null)}
+let evQ=Promise.resolve();
+// Posts one report's screenshot to the evidence channel (once), saves where it went
+function postEvidence(k,r){
+  if(!hookOn()||!r||r.test||r.shot?.mid||postEvidence.busy?.has(k))return evQ;
+  (postEvidence.busy??=new Set()).add(k);
+  const src=shotSrc(k,r),snap={...r},by=r.validByName||r.validBy||P[me.k]?.displayName||me.k;
+  evQ=evQ.then(async()=>{
+    try{
+      const d=await src,blob=dataUrlBlob(d);if(!blob)return;
+      const ext=/png/.test(blob.type)?'png':'jpg',name=`report-${k}.${ext}`;
+      const content=(`**${snap.displayName||snap.username||'?'}** (@${snap.username||'?'} · ${snap.userId??'?'})`+
+        (snap.word?` · flagged for “${snap.word}”`:'')+` · validated by ${by}\n> ${String(snap.text||'').replace(/\n/g,' ')}`).slice(0,1900);
+      const fd=new FormData();
+      fd.append('payload_json',JSON.stringify({content,username:'Mod Reports',allowed_mentions:{parse:[]},attachments:[{id:0,filename:name}]}));
+      fd.append('files[0]',blob,name);
+      const m=await (await hookFetch(SET.evidenceHook+'?wait=true',{method:'POST',body:fd})).json();
+      const url=m?.attachments?.[0]?.url;if(!m?.id||!url)throw new Error('Discord didn’t send back the picture');
+      saveShot(k,snap,{mid:m.id,ch:m.channel_id||null,url,at:Date.now()})
+    }catch(e){toast('Couldn’t post the screenshot to the evidence channel: '+e.message,{kind:'bad'})}
+    finally{postEvidence.busy.delete(k)}});
+  return evQ}
+function saveShot(k,r,shot){
+  if(D[k]){D[k].shot=shot;if(!pend[k])api('/reports/'+k,'PATCH',{shot}).catch(()=>{})}
+  const pid=pidOf(r);if(!pid)return;
+  api('/players','PATCH',{[`${pid}/r/${k}/shot`]:shot}).catch(()=>{});
+  if(PLR?.[pid]?.r?.[k])PLR[pid].r[k].shot=shot}
+// A link that works right now: old ones are swapped for fresh ones through the webhook
+async function freshShot(pid,k,shot){
+  if(!shot?.mid)return null;
+  if(Date.now()-(shot.at||0)<FRESH||!hookOn())return shot.url||null;
+  try{const m=await (await hookFetch(`${SET.evidenceHook}/messages/${shot.mid}`,{})).json();
+    const url=m?.attachments?.[0]?.url;if(!url)return null;
+    const ns={...shot,url,at:Date.now()};
+    if(pid)api('/players','PATCH',{[`${pid}/r/${k}/shot`]:ns}).catch(()=>{});
+    if(PLR?.[pid]?.r?.[k])PLR[pid].r[k].shot=ns;if(D[k])D[k].shot=ns;
+    return url}catch{return null}}
+// Copy info: the table, then one link per validated screenshot (Discord shows them as images when pasted)
+async function copyInfo(text,p,btn){
+  const isV=x=>x.s==='valid'||x.s==='resolved',vs=(p.reps||[]).filter(isV),withShot=vs.filter(x=>x.shot?.mid);
+  if(!vs.length)return copyText(text);
+  if(btn){btn.disabled=true;btn.textContent='Getting links...'}
+  const lines=[];let i=0;
+  for(const x of withShot){const u=await freshShot(p.id,x.k,x.shot);if(u)lines.push(`${++i}. “${x.word||'?'}” · ${x.t?new Date(x.t).toLocaleDateString():''}\n${u}`)}
+  const miss=vs.length-i;
+  if(btn){btn.disabled=false;btn.textContent='📋 Copy info'}
+  copyText(text+(lines.length?`\n\nValidated screenshots:\n${lines.join('\n')}`:'')+(miss?`\n(${miss} validated report${miss>1?'s have':' has'} no saved screenshot)`:''))}
+async function openShot(pid,k,shot){
+  const w=window.open('about:blank','_blank');const u=await freshShot(pid,k,shot);
+  if(u&&w)w.location=u;else{if(w)w.close();toast('That screenshot isn’t available anymore.',{kind:'bad'})}}
+// Profile settings box (Creator and Administrators)
+function evidenceBox(){
+  const inp=h('input',{type:'text',placeholder:'https://discord.com/api/webhooks/...',autocomplete:'off',spellcheck:false,value:''});inp.setAttribute('data-lpignore','true');
+  const save=h('button',{textContent:'Save webhook'});
+  save.onclick=async()=>{
+    const u=inp.value.trim();if(!HOOK_RE.test(u))return toast('That doesn’t look like a Discord webhook URL.',{kind:'bad'});
+    save.disabled=true;
+    try{const w=await (await hookFetch(u,{})).json();
+      await api('/settings','PATCH',{evidenceHook:u,evidenceName:w?.name||null,evidenceBy:me.k});
+      Object.assign(SET,{evidenceHook:u,evidenceName:w?.name||null,evidenceBy:me.k});toast('Evidence channel connected',{kind:'ok'});render()}
+    catch(e){toast('Couldn’t use that webhook: '+e.message,{kind:'bad'});save.disabled=false}};
+  const missing=Object.entries(D).filter(([,r])=>r.status==='valid'&&!r.aiv&&!r.test&&!r.shot?.mid);
+  return [h('b',{textContent:'Evidence channel (Discord)'}),
+    h('small',{className:'mu',textContent:hookOn()?`Connected${SET.evidenceName?' to webhook “'+SET.evidenceName+'”':''}. Screenshots of reports marked Valid or Resolved are posted there, and Copy info adds their links.`:'Paste a webhook URL for a private channel. Screenshots of reports marked Valid or Resolved get posted there, so Copy info can add links that show as images in Discord.'}),
+    h('div',{className:'mform'},inp,save,...(hookOn()?[h('button',{textContent:'Disconnect',onclick:async()=>{if(!confirm('Stop posting screenshots to the evidence channel?'))return;
+      try{await api('/settings','PATCH',{evidenceHook:null,evidenceName:null});delete SET.evidenceHook;delete SET.evidenceName;render()}catch(e){alert(e.message)}}})]:[])),
+    ...(hookOn()&&missing.length?[h('button',{textContent:`🖼 Post the ${missing.length} valid report${missing.length>1?'s':''} without a saved screenshot`,onclick:async e=>{
+      e.target.disabled=true;for(const[k,r]of missing)postEvidence(k,r);await evQ;toast('Done posting screenshots',{kind:'ok'});render()}})]:[]),
+    h('small',{className:'mu',textContent:'The webhook is saved in the database, not in the dashboard file, so it never ends up on GitHub.'})]}
 // The copyable table (used on a player's A.F.R page and in Player records)
 function infoCard(p){
   const uid=p.uid,link=/^\d+$/.test(String(uid))?`https://www.roblox.com/users/${uid}/profile`:null,S=p.S||recStats([]);
@@ -597,36 +742,44 @@ function infoCard(p){
     ['Reports',S.total],['Validated',S.valid],['Denied',S.denied],['Unchecked',S.open],['Total time',S.time+(S.noReason.length?` (no time set for: ${S.noReason.join(', ')})`:'')]];
   const text=rows.filter(([,v])=>v!=null&&v!=='').map(([l,v])=>`${l}: ${v}`).join('\n');
   return h('div',{className:'pc pinfo'},
-    h('div',{className:'pih'},h('b',{textContent:'Player info'}),h('button',{textContent:'📋 Copy info',title:'Copy the whole table as text (pastes nicely into Discord)',onclick:()=>copyText(text)})),
+    h('div',{className:'pih'},h('b',{textContent:'Player info'}),h('button',{textContent:'📋 Copy info',title:'Copy the whole table as text (pastes nicely into Discord), plus links to the validated screenshots',onclick:e=>copyInfo(text,p,e.currentTarget)})),
     h('table',{},...rows.map(([l,v])=>h('tr',{},h('th',{textContent:l}),
       h('td',{},l==='Profile'&&v?h('a',{href:v,target:'_blank',rel:'noopener noreferrer',textContent:v}):h('span',{textContent:v??'-'}),
         v!=null&&v!==''&&['Display name','Username','User ID','Profile'].includes(l)?h('button',{className:'cp',textContent:'Copy',onclick:()=>copyText(v)}):'')))),
-    h('small',{className:'mu',textContent:'Validated = marked Valid or Resolved by a mod (AI valid counts as unchecked until a mod confirms it). Total time adds up the Report/Arrest Case time for every validated report. Counts include reports that were already handled and deleted.'}))}
+    h('small',{className:'mu',textContent:'Validated = marked Valid or Resolved by a mod (AI valid counts as unchecked until a mod confirms it). Total time adds up the Report/Arrest Case time for every validated report. Counts include reports that were already handled and deleted.'+(()=>{const n=(p.reps||[]).filter(x=>(x.s==='valid'||x.s==='resolved')&&x.shot?.mid).length;return n?` Copy info also adds ${n} screenshot link${n>1?'s':''} from the evidence channel.`:''})()}))}
 const playerStats=g=>(playerRecords()[g.id]||{S:recStats([])}).S;
 function playerCard(g){
   const p=playerRecords()[g.id]||{reps:[],S:recStats([])},r0=g.list[0]||{};
-  return infoCard({name:g.name||r0.displayName||p.name,user:g.user||r0.username||p.user,uid:r0.userId??p.uid,S:p.S})}
+  return infoCard({id:g.id,name:g.name||r0.displayName||p.name,user:g.user||r0.username||p.user,uid:r0.userId??p.uid,S:p.S,reps:p.reps})}
 
-let pf={a:'all',q:'',sort:'last',n:60},plOpen=null;
+let pf={a:'all',q:'',f:'all',sort:'last',n:60},plOpen=null;
+const PFIELDS=[['all','Everything','Search name, @username, ID or message'],['name','Display name','Search display names'],['user','Username','Search @usernames'],['id','User ID','Search user IDs']];
 const PSORTS=[['last','Latest first'],['valid','Most validated'],['time','Most time'],['most','Most reports'],['denied','Most denied'],['name','Name A–Z']];
 const OUT={resolved:['✅','Resolved','resolved'],denied:['❌','Denied','denied'],valid:['👍','Valid','valid'],ai:['🤖','AI valid, unchecked','ai'],open:['•','Unchecked','cleared'],deleted:['🗑','Deleted','']};
+// Where the list is coming from (shown under the search bar)
+function plSource(){
+  if(usingList())return h('small',{className:'mu',style:'display:block;margin:-6px 0 12px',textContent:`From the players list in Firebase \u00B7 ${Object.keys(PLR).length} player${Object.keys(PLR).length!==1?'s':''} saved \u00B7 updated ${plAt?ago(plAt):'-'}`});
+  if(plBuilding)return h('small',{className:'mu',style:'display:block;margin:-6px 0 12px',textContent:'Setting up the players list from History...'});
+  if(plErr)return h('small',{className:'bad',style:'display:block;margin:-6px 0 12px',textContent:`Can\u2019t use the players list (${plErr}). Add the /players rule in Firebase. Showing it from History for now.`});
+  return h('small',{className:'mu',style:'display:block;margin:-6px 0 12px',textContent:'Showing it from History until the players list is set up.'})}
 function renderPlist(main){
   const recs=Object.values(playerRecords(true));
   const n={all:recs.length,valid:recs.filter(p=>p.S.valid).length,denied:recs.filter(p=>p.S.denied).length};
   const chips=h('div',{className:'seg2'},...[['all','All'],['valid','Validated'],['denied','Denied']].map(([v,l])=>
     h('button',{className:pf.a===v?'on':'',textContent:`${l} (${n[v]})`,title:v==='valid'?'Players with at least one validated report':v==='denied'?'Players with at least one denied report':'Everyone who has been reported',onclick:()=>{pf.a=v;pf.n=60;render()}})));
-  const q=h('input',{placeholder:'Search name, @username, ID or message',value:pf.q,oninput:e=>{pf.q=e.target.value;pf.n=60;paintPlist()}});
+  const q=h('input',{placeholder:PFIELDS.find(f=>f[0]===pf.f)[2],value:pf.q,oninput:e=>{pf.q=e.target.value;pf.n=60;paintPlist()}});
+  const fs=h('select',{title:'What to search in',onchange:e=>{pf.f=e.target.value;q.placeholder=PFIELDS.find(f=>f[0]===pf.f)[2];paintPlist();q.focus()}},...PFIELDS.map(([v,l])=>h('option',{value:v,textContent:'Search in: '+l,selected:pf.f===v})));
   const so=h('select',{title:'Sort players',onchange:e=>{pf.sort=e.target.value;paintPlist()}},...PSORTS.map(([v,l])=>h('option',{value:v,textContent:l,selected:pf.sort===v})));
   main.append(h('p',{className:'mu',style:'margin-top:0;max-width:760px',textContent:'Everyone who has been reported, including players whose reports were already handled and deleted. View only: click a player to see their info and every report. Test reports from the Debug tab are left out.'}),
-    h('div',{className:'hbar'},chips,q,so),h('div',{id:'pl'}));
+    h('div',{className:'hbar'},chips,fs,q,so),plSource(),h('div',{id:'pl'}));
   paintPlist(recs);
   loadHeads(recs.sort((a,b)=>b.last-a.last).slice(0,150).map(p=>p.id))}
 function paintPlist(recs){
   const box=$('#pl');if(!box)return;recs??=Object.values(playerRecords(true));
-  if(hErr){box.replaceChildren(h('p',{className:'mu',textContent:'Can’t read history. Add the /history rules in Firebase.'}));return}
+  if(hErr&&!usingList()){box.replaceChildren(h('p',{className:'mu',textContent:'Can’t read history. Add the /history rules in Firebase.'}));return}
   const q=pf.q.trim().toLowerCase().replace(/^@/,'');
   let l=recs.filter(p=>(pf.a==='all'||(pf.a==='valid'?p.S.valid:p.S.denied)>0)&&
-    (!q||[p.name,p.user,p.id,...p.reps.map(x=>x.text)].join(' ').toLowerCase().includes(q)));
+    (!q||String(pf.f==='name'?p.name||'':pf.f==='user'?p.user||'':pf.f==='id'?p.uid??p.id:[p.name,p.user,p.uid??p.id,...p.reps.map(x=>x.text)].join(' ')).toLowerCase().includes(q)));
   const nm=p=>String(p.name||p.user||p.id);
   l.sort({last:(a,b)=>b.last-a.last,valid:(a,b)=>b.S.valid-a.S.valid||b.last-a.last,time:(a,b)=>b.S.hours-a.S.hours||b.last-a.last,
     most:(a,b)=>b.S.total-a.S.total||b.last-a.last,denied:(a,b)=>b.S.denied-a.S.denied||b.last-a.last,name:(a,b)=>nm(a).localeCompare(nm(b))}[pf.sort]||(()=>0));
@@ -655,6 +808,7 @@ function plRow(p){
         const who=x.s==='open'||x.s==='ai'?'':x.by?` by ${x.by}`:'',vb=x.s==='resolved'&&x.validBy&&x.validBy!==x.by?` (validated by ${x.validBy})`:'';
         return h('div',{className:'row a-'+cls},h('span',{className:'ic',textContent:ic}),
           h('div',{className:'rb'},h('b',{textContent:`${lb}${who}${vb}`+(x.word?` · “${x.word}”`:'')}),h('div',{className:'msg'},hl(x.text||'',x.word))),
+          ...(x.shot?.mid?[h('button',{className:'cp',textContent:'\uD83D\uDDBC',title:'Open the screenshot (from the evidence channel)',onclick:()=>openShot(p.id,x.k,x.shot)})]:[]),
           h('small',{className:'tm',textContent:x.t?when(x.t):'',title:x.t?new Date(x.t).toLocaleString():''}))}))))}
   return row}
 function openZoom(src,onClose){
@@ -791,7 +945,7 @@ async function setStatus(st){
   try{
     const vb=v==='valid'?{validBy:me.k,validByName:P[me.k]?.displayName||me.k}:{};
     await api('/reports/'+k,'PATCH',{status:v,aiv:null,...vb});Object.assign(r,vb);
-    log(v||'cleared',r,k);if(v==='resolved'||v==='denied')schedDel(k);else cancelDel(k);
+    log(v||'cleared',r,k);if(v==='valid'||v==='resolved')postEvidence(k,r);if(v==='resolved'||v==='denied')schedDel(k);else cancelDel(k);
     const who=r.displayName||r.username||'this report',gone=v==='resolved'||v==='denied';
     toast(v?`${{resolved:'Resolved',denied:'Denied',valid:'Marked valid'}[v]}: ${who}${gone?'. Deleting in 10s.':''}`:`Reopened: ${who}`,
       {kind:v==='denied'?'bad':v?'ok':'',action:v?'Undo':null,ms:gone?9500:5000,onAction:()=>restoreStatus(k,prev)});
@@ -809,6 +963,7 @@ async function restoreStatus(k,prev){
     const human=prev.status==='valid'&&!prev.aiv&&vb;
     await api('/history','POST',{action:human?'valid':'cleared',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,...rFields(r),
       ...(human?vb:{by:me.k,byName:P[me.k]?.displayName??me.k}),undo:true,undoneBy:me.k,t:{'.sv':'timestamp'}});
+    savePlayers(playerPatch(r,k,human?'valid':'cleared',human?vb:meBy()));
     await loadHist();lastStats=0;render();if(sel===k)paintSide();toast('Undone',{kind:'ok',ms:2500})
   }catch(e){toast(e.message,{kind:'bad'})}}
 async function doDelete(){
@@ -997,6 +1152,8 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['3.9','2026-10-28',['Evidence channel: connect a private Discord channel with a webhook (Profile settings, Creator and Administrators). Screenshots of reports marked Valid or Resolved are posted there automatically','\uD83D\uDCCB Copy info now adds a link to every validated screenshot after the table, so they show as images when pasted in Discord, even after the report was deleted','Links are refreshed when needed, since Discord image links expire after a day','Player records: \uD83D\uDDBC opens a validated report\u2019s screenshot']],
+  ['3.8','2026-10-27',['Player records now comes from a players list saved in Firebase (/players), kept up to date every time a report is handled, so it opens instantly','The list sets itself up from History the first time someone opens Player records. The Creator can rebuild it from the Debug tab','Search in: Everything, Display name, Username or User ID']],
   ['3.7','2026-10-27',['New Player records tab (view only): everyone who has been reported, including players whose reports were already handled and deleted','Filters: All, Validated, Denied. Search by name, @username, ID or message, and sort by latest, most validated, most time, most reports, most denied or name','Click a player for their Player info table (\uD83D\uDCCB Copy info) and every report with its outcome, who handled it and when','AI valid now counts as unchecked in player counts until a mod confirms it','Test reports from the Debug tab are kept out of Player records']],
   ['3.6.1','2026-10-27',['Removed Did you check the image: 👍 Valid works straight away again (the screenshot still opens full screen when you click it)']],
   ['3.6','2026-10-27',['Player info table on every player\u2019s page in A.F.R: display name, username, user ID, profile link, reports, validated, denied, unchecked and total time','\uD83D\uDCCB Copy info copies the whole table as text (pastes nicely into Discord), and each name, ID and link has its own Copy button','Counts include reports that were already handled and deleted']],
@@ -1076,7 +1233,7 @@ const OBS=[
   {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in.','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','The line under the switch tells you whether the AI is online right now.']},
   {v:'launch',t:'Launcher',b:['Launch an account into the game in one click, or tick several and use Launch selected.','Pick bot accounts with the Bots button. Each bot shows whether it’s online, hopping servers or disconnected.','Auto-Call Bot when down relaunches a bot that disconnects or goes quiet for 2 minutes.','Only the Creator and Administrators can add or remove accounts.','Recent launches shows what was launched and whether it worked.']},
   {v:'hist',t:'History',b:['Every action anyone takes on a report: resolved, denied, valid, reopened and deleted.','Each line shows the player, their message, who did it and when.']},
-  {v:'plist',t:'Player records',b:['Everyone who has been reported, also after their reports were handled and deleted.','Filter by Validated or Denied, search by name, @username, ID or message, and sort by most validated, most time and more.','Click a player to see their info table (with \uD83D\uDCCB Copy info) and every report: what happened, who handled it, and when.','It\u2019s view only: nothing can be changed from this tab.']},
+  {v:'plist',t:'Player records',b:['Everyone who has been reported, also after their reports were handled and deleted. It comes from the players list saved in Firebase, so it opens instantly.','Filter by Validated or Denied. Pick what to search in (everything, display name, username or user ID) and sort by most validated, most time and more.','Click a player to see their info table (with \uD83D\uDCCB Copy info) and every report: what happened, who handled it, and when.','It\u2019s view only: nothing can be changed from this tab.']},
   {v:'brep',t:'Banned Reporters',b:['Reporters are the scanners that send reports in. Each has its own ID from the computer it runs on.','Block a scanner that sends false reports from the report panel (\uD83D\uDEAB Block this reporter) or from here. Only that scanner stops.','Check the ID before you press Unban so you unban the right one.']},
   {v:'all',t:'All profiles',b:['Everyone’s stats side by side, with Creator and Admin tags.','If someone hid their stats, you’ll see nil instead of numbers.']},
   {v:'prof',t:'Profile settings',b:['Set a profile picture, change your display name or password.','Hide my stats: other mods see nil instead of your numbers.','Reviewing: go to the next report automatically after marking one, play a sound when new reports come in, and get a desktop notification for them while the dashboard is in the background.','🧭 Replay onboarding starts this tour again.']},
@@ -1265,7 +1422,7 @@ async function blockReporter(rid,reason,delOpen){
       try{await api('/reports/'+k,'DELETE');cancelDel(k);delete D[k];n++;
         api('/images/'+k,'DELETE').catch(()=>{});api('/notes/'+k,'DELETE').catch(()=>{});
         api('/history','POST',{action:'deleted',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,
-          ...rFields(r),why:'Reporter blocked',...by,t:ts}).catch(()=>{})}catch{}}
+          ...rFields(r),why:'Reporter blocked',...by,t:ts}).catch(()=>{});savePlayers(playerPatch(r,k,'deleted',by))}catch{}}
     brOpen=null;
     toast(`Blocked ${i.name}. Its new reports won’t come in`+(n?`, and ${n} unchecked report${n>1?'s were':' was'} deleted.`:'.'),{kind:'ok'});
     await Promise.all([loadReporters(),view==='brep'?loadBrep():null]);if(n)await loadHist();
@@ -1337,10 +1494,13 @@ function renderDbg(main){
     h('h2',{className:'sec',textContent:'Test reports'}),
     h('div',{className:'mform'},h('span',{textContent:`${tests} test report${tests!==1?'s':''} in the database`}),
       h('button',{className:'del',textContent:'🗑 Delete all test reports',disabled:!tests,onclick:clearTests})),
+    h('h2',{className:'sec',textContent:'Players list'}),
+    h('div',{className:'mform'},h('span',{textContent:usingList()?`${Object.keys(PLR).length} players saved${SET.playersBuiltAt?', first built '+new Date(SET.playersBuiltAt).toLocaleString():''}`:SET.playersBuilt?'Built, not loaded yet':'Not set up yet (it sets itself up the first time someone opens Player records)'}),
+      h('button',{textContent:'\u27F3 Rebuild from History',title:'Works the whole list out again from History and replaces /players',disabled:plBuilding,onclick:()=>{if(confirm('Rebuild the players list from History?\n\nIt replaces /players with what History says.'))buildPlayers(true)}})),
     h('h2',{className:'sec',textContent:'Status'}),
     h('div',{className:'pc',style:'max-width:560px;display:grid;gap:4px'},
       ...[['Database',$('#st').textContent],['Reports',`${rs.length} (${rs.filter(r=>!r.status).length} unchecked, ${tests} test)`],['Profiles',Object.keys(P).length],
-        ['Scanners checked in',Object.keys(RPT).length],['Blocked reporters',Object.keys(BRP).length],['Minimum scanner version',dbgMinVer()||'off'],
+        ['Scanners checked in',Object.keys(RPT).length],['Blocked reporters',Object.keys(BRP).length],['Minimum scanner version',dbgMinVer()||'off'],['Players list',usingList()?Object.keys(PLR).length+' players':plErr||'not set up'],
         ['Last refresh',lastLoad?new Date(lastLoad).toLocaleTimeString():'-'],['Dashboard version',CHANGES[0][0]]].map(([a,b])=>h('small',{},h('b',{textContent:a+': '}),String(b)))))}
 // Clears a scanner off the All reporters list (old or duplicate entries). Not a block: if it's still running it checks in again.
 async function removeReporter(rid){
@@ -1466,6 +1626,7 @@ function renderProf(main){
         const v=!e.target.checked;try{await api('/settings','PATCH',{creatorUnprotected:v});SET.creatorUnprotected=v;render()}catch(er){alert(er.message);e.target.checked=!v}}}),
         h('span',{className:'knob'}),h('span',{textContent:'Protect me from Administrator actions'})),
       h('small',{className:'mu',textContent:'When off, Administrators can act on your profile like anyone else’s.'})]:[]),
+    ...(canManage()?evidenceBox():[]),
     h('b',{textContent:'Reviewing'}),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking one'),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:ls('ping')==='1',onchange:e=>{ls('ping',e.target.checked?'1':'0');if(e.target.checked)ping()}}),'Play a sound when new reports come in'),
@@ -1487,8 +1648,10 @@ async function resolveAllValid(){
   const up={};for(const k of vs){up[k+'/status']='resolved';up[k+'/aiv']=null}
   try{await api('/reports','PATCH',up)}catch(e){alert(e.message);render();return}
   for(const k of vs){D[k].status='resolved';D[k].aiv=null}
+  for(const k of vs)postEvidence(k,D[k]);
   for(const k of vs)schedDel(k);
   render();if(sel&&vs.includes(sel))paintSide();
+  savePlayers(Object.assign({},...vs.map(k=>playerPatch(D[k]||{},k,'resolved',meBy()))));
   await Promise.all(vs.map(k=>{const r=D[k]||{};
     return api('/history','POST',{action:'resolved',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,...rFields(r),by:me.k,byName:P[me.k]?.displayName??me.k,bulk:true,t:{'.sv':'timestamp'}}).catch(()=>{})}));
   await loadHist();lastStats=0;render()}
@@ -1694,7 +1857,8 @@ async function loadInner(){
   try{SET=await api('/settings')||{}}catch{}
   try{NOTED=new Set(Object.keys(await api('/notes','GET',undefined,'shallow=true')||{}))}catch{}
   await loadHist();
-  if((view==='home'||view==='all'||view==='plist')&&Date.now()-lastStats>60000)await loadStats();
+  if((view==='home'||view==='all'||(view==='plist'&&!usingList()))&&Date.now()-lastStats>60000)await loadStats();
+  if(view==='plist'||(view==='afr'&&user&&SET.playersBuilt))await loadPlayers();
   if(view==='launch')await loadLauncher();
   if(sel&&!D[sel])closeSide();else if(!busy())render()}
 
