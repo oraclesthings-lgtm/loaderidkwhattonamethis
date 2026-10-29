@@ -307,6 +307,9 @@ header button{padding:7px 10px}
 .pchip{font-size:12px;padding:1px 8px;border-radius:9px;background:#ffffff14;white-space:nowrap}
 .pchip.g{background:#1f9d5559}.pchip.r{background:#c23b3b59}.pchip.t{background:#6f8cff3d}
 @media(max-width:760px){.prec .phd{flex-wrap:wrap}.prec .phd .rb{min-width:60%}}
+.row.hlink{cursor:pointer}
+.row.hlink:hover{border-color:var(--ac)}
+.row.sel{outline:2px solid var(--ac)}
 </style>
 </head>
 <body>
@@ -559,7 +562,9 @@ function renderAfr(main){
       h('button',{className:`tile s-${markOf(r)}${r.k===sel?' sel':''}`,onclick:()=>openSide(r.k)},
         h('small',{className:'trow'},h('span',{className:'tlbl',textContent:(r.word?`Flagged: ${r.word}`:'')+(isBlocked(ridOf(r))?' · 🚫 blocked reporter':'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),
           h('span',{className:'tm2',textContent:ago(pushTime(r.k)),title:new Date(pushTime(r.k)).toLocaleString()})),
-        h('div',{className:'msg'},hl(r.text,r.word))))));
+        h('div',{className:'msg'},hl(r.text,r.word))))),
+      ...(pp=>[h('h2',{className:'sec',textContent:`Player history (${pp.reps.length})`}),
+        h('small',{className:'mu',style:'display:block;margin:-8px 0 12px',textContent:'Every report this player has had, including ones already handled and deleted. Click one that\u2019s still open to see it.'}),historyList(pp,true)])(playerRecords()[g.id]||{id:g.id,reps:[]}));
   }}
 
 // ---------- Player records: every reported player, from History + the open reports (view only) ----------
@@ -812,13 +817,19 @@ function plRow(p){
     row.append(h('div',{className:'pb'},infoCard(p),
       ...(live?[h('div',{},h('button',{textContent:'Open their reports in A.F.R',onclick:()=>{go('afr');openPlayer(p.id)}}))]:[]),
       h('b',{textContent:`Reports (${p.reps.length})`}),
-      h('div',{className:'list'},...p.reps.map(x=>{const[ic,lb,cls]=OUT[x.s]||['•',String(x.s),''];
-        const who=x.s==='open'||x.s==='ai'?'':x.by?` by ${x.by}`:'',vb=x.s==='resolved'&&x.validBy&&x.validBy!==x.by?` (validated by ${x.validBy})`:'';
-        return h('div',{className:'row a-'+cls},h('span',{className:'ic',textContent:ic}),
-          h('div',{className:'rb'},h('b',{textContent:`${lb}${who}${vb}`+(x.word?` · “${x.word}”`:'')}),h('div',{className:'msg'},hl(x.text||'',x.word))),
-          ...(x.shot?.mid?[h('button',{className:'cp',textContent:'\uD83D\uDDBC',title:'Open the screenshot (from the evidence channel)',onclick:()=>openShot(p.id,x.k,x.shot)})]:[]),
-          h('small',{className:'tm',textContent:x.t?when(x.t):'',title:x.t?new Date(x.t).toLocaleString():''}))}))))}
+      historyList(p)))}
   return row}
+// Every report a player has had, newest first: outcome, who handled it, the word and the message (from Player records)
+function historyList(p,openLive){
+  if(!p.reps.length)return h('p',{className:'mu',textContent:'No reports yet.'});
+  return h('div',{className:'list'},...p.reps.map(x=>{const[ic,lb,cls]=OUT[x.s]||['•',String(x.s),''];
+    const who=x.s==='open'||x.s==='ai'?'':x.by?` by ${x.by}`:'',vb=x.s==='resolved'&&x.validBy&&x.validBy!==x.by?` (validated by ${x.validBy})`:'';
+    const canOpen=openLive&&x.live&&D[x.k];
+    return h('div',{className:'row a-'+cls+(canOpen?' hlink':'')+(canOpen&&x.k===sel?' sel':''),title:canOpen?'Open this report':'',onclick:canOpen?e=>{if(!e.target.closest('button'))openSide(x.k)}:null},
+      h('span',{className:'ic',textContent:ic}),
+      h('div',{className:'rb'},h('b',{textContent:`${lb}${who}${vb}`+(x.word?` · “${x.word}”`:'')}),h('div',{className:'msg'},hl(x.text||'',x.word))),
+      ...(x.shot?.mid?[h('button',{className:'cp',textContent:'\uD83D\uDDBC',title:'Open the screenshot (from the evidence channel)',onclick:()=>openShot(p.id,x.k,x.shot)})]:[]),
+      h('small',{className:'tm',textContent:x.t?when(x.t):'',title:x.t?new Date(x.t).toLocaleString():''}))}))}
 function openZoom(src,onClose){
   const img=h('img',{src,draggable:false}),box=h('div',{id:'zm'});
   let sc=1,x=0,y=0,fit=1,drag=null;
@@ -955,8 +966,8 @@ async function setStatus(st){
     await api('/reports/'+k,'PATCH',{status:v,aiv:null,...vb});Object.assign(r,vb);
     log(v||'cleared',r,k);if(v==='valid'||v==='resolved')postEvidence(k,r);if(v==='resolved'||v==='denied')schedDel(k);else cancelDel(k);
     const who=r.displayName||r.username||'this report',gone=v==='resolved'||v==='denied';
-    toast(v?`${{resolved:'Resolved',denied:'Denied',valid:'Marked valid'}[v]}: ${who}${gone?'. Deleting in 10s.':''}`:`Reopened: ${who}`,
-      {kind:v==='denied'?'bad':v?'ok':'',action:v?'Undo':null,ms:gone?9500:5000,onAction:()=>restoreStatus(k,prev)});
+    toast(v?`${{resolved:'Resolved',denied:'Denied',valid:'Marked valid'}[v]}: ${who}${gone?'. Deleting in 3s.':''}`:`Reopened: ${who}`,
+      {kind:v==='denied'?'bad':v?'ok':'',action:v?'Undo':null,ms:gone?3000:5000,onAction:()=>restoreStatus(k,prev)});
     if(nxt&&D[nxt]&&autoNext()&&sel===k)openSide(nxt);else{render();if(sel===k)paintSide()}}
   catch(e){r.status=old;r.aiv=ai;render();paintSide();alert(e.message)}}
 // Undo: put the report back exactly as it was, and put History back so stats and Valid credit don't move
@@ -1068,13 +1079,15 @@ function pick(t,v){flt={type:t,val:v};fOpen=false;render();paintFlt()}
 // The key is saved in /settings/orKey (set on this tab by the Creator or an Administrator), never in this file.
 // Only one open dashboard does the checking at a time (/settings/aiRunner), so reports aren't checked twice.
 // The model is fixed here on purpose (it can't be changed from the dashboard)
-const AI_MODEL='nvidia/nemotron-3.5-super-vl:free';
+const AI_MODEL='nvidia/nemotron-3-ultra-550b-a55b:free';
 const AI_SYSTEM='You help moderators review Roblox chat. A keyword filter flagged a message because it contains a watched word. '+
   'Decide whether the message is a genuine problem (sexual or inappropriate content, coded or filter-bypassing slang '+
   'for it, sexual solicitation, harassment) or a false positive (the word used innocently, for example cooking, school '+
   'or ordinary conversation). Players often use innocent-looking words as coded slang, so judge the wording and the '+
   'tone, not just the word. If a screenshot of the chat is attached, the flagged message is usually marked with a red box: '+
   'use the messages around it for context (who it was said to, what they were talking about), but judge only the flagged message. '+
+  'You may also get examples of how the moderators decided earlier reports: learn their standards from them. '+
+  'You may get the player\u2019s earlier record too: use it as context only, a history doesn\u2019t make this message a problem by itself. '+
   'If you can’t tell, answer NO.\nReply in exactly this format:\nVERDICT: YES or NO\nREASON: one short sentence.';
 const TAB_ID=Math.random().toString(36).slice(2,8);
 let AIS={runner:null,busy:false,last:0,pauseTill:0,err:'',errAt:0,done:0};
@@ -1082,8 +1095,8 @@ const aiKeyOk=()=>/^sk-or-[\w-]{20,}$/.test(SET.orKey||'');
 const aiModel=()=>AI_MODEL;
 const myRunId=()=>`${me?.k}:${TAB_ID}`;
 const pyWorker=()=>!!SET.workerAt&&Math.abs(Date.now()-SET.workerAt)<60000;  // the old ai-assist.py is still running
-async function askAI(word,text,img){
-  const q=`Flagged word: ${word||''}\nMessage: ${text||''}`;
+async function askAI(word,text,img,ctx){
+  const q=`Flagged word: ${word||''}\nMessage: ${text||''}`+(ctx?'\n\n'+ctx:'');
   const content=img?[{type:'text',text:q+'\nA screenshot of the chat is attached.'},{type:'image_url',image_url:{url:img}}]:q;
   const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',
     headers:{'Authorization':'Bearer '+SET.orKey,'Content-Type':'application/json','X-Title':'Mod Reports'},
@@ -1091,12 +1104,28 @@ async function askAI(word,text,img){
       messages:[{role:'system',content:AI_SYSTEM},{role:'user',content}]})});
   let j=null;try{j=await r.json()}catch{}
   if(!r.ok){const m=j?.error?.message||('HTTP '+r.status);
-    if(img&&r.status===400&&/image|vision|multimodal|content/i.test(m))return askAI(word,text,null);  // model won't take the picture: text only
+    if(img&&(r.status===400||r.status===404)&&/image|vision|multimodal|modalit|content/i.test(m)){AIS.noImg=aiModel();return askAI(word,text,null,ctx)}  // model won't take pictures: text only from now on
     const e=new Error(m);e.status=r.status;throw e}
   const out=String(j?.choices?.[0]?.message?.content||'');
   const v=/VERDICT:\s*(YES|NO)/i.exec(out),why=/REASON:\s*([\s\S]+)/i.exec(out);
   return{verdict:v?v[1].toLowerCase():'unsure',reason:(why?why[1]:out||'No answer').trim().slice(0,300),img:!!img}}
 // Takes over the checking if no other open dashboard is doing it
+// What the AI learns from: earlier decisions by the mods (same word first) and this player's own record. No names are sent.
+const AI_EX=8;
+async function aiContext(k,cur){
+  try{if(SET.playersBuilt)await loadPlayers();else if(Date.now()-lastStats>300000)await loadStats()}catch{}
+  const all=playerRecords(true),w=String(cur.word||'').toLowerCase(),clip=t=>String(t||'').replace(/\s+/g,' ').trim().slice(0,160);
+  const pool=[];for(const p of Object.values(all))for(const x of p.reps)if(x.k!==k&&x.text&&['valid','resolved','denied'].includes(x.s))pool.push(x);
+  pool.sort((a,b)=>((String(b.word||'').toLowerCase()===w)-(String(a.word||'').toLowerCase()===w))||(b.at||b.t||0)-(a.at||a.t||0));
+  const pick=yes=>{const seen=new Set(),out=[];for(const x of pool){if((x.s!=='denied')!==yes)continue;const t=clip(x.text).toLowerCase();if(seen.has(t))continue;seen.add(t);out.push(x);if(out.length>=AI_EX)break}return out};
+  const ys=pick(true),ns=pick(false),line=x=>`- [${x.word||'?'}] "${clip(x.text)}"`;
+  const parts=[];
+  if(ys.length||ns.length)parts.push('How the moderators decided earlier reports:',
+    ...(ys.length?['Counted as a problem (YES):',...ys.map(line)]:[]),...(ns.length?['Not a problem (NO):',...ns.map(line)]:[]));
+  const me_=all[String(cur.userId??cur.username)],prev=(me_?.reps||[]).filter(x=>x.k!==k);
+  if(prev.length){const S=recStats(prev),pv=prev.filter(x=>x.s==='valid'||x.s==='resolved').slice(0,3);
+    parts.push('',`This player's earlier record: ${S.total} report${S.total>1?'s':''}, ${S.valid} validated, ${S.denied} denied.`,...pv.map(x=>`- validated before: [${x.word||'?'}] "${clip(x.text)}"`))}
+  return parts.join('\n')}
 async function aiClaim(){
   let cur=null;try{cur=await api('/settings/aiRunner')}catch{}
   const mine=myRunId(),stale=!cur||!cur.at||Date.now()-cur.at>35000;
@@ -1118,8 +1147,9 @@ async function aiTick(){
     if(!cur||cur.ai||cur.status){if(cur&&D[k])Object.assign(D[k],cur);if(!cur)delete D[k];return}
     AIS.last=Date.now();
     let res;
-    const img=await shotSrc(k,cur);  // the screenshot, if the report has one
-    try{res=await askAI(cur.word,cur.text,img)}
+    const img=AIS.noImg===aiModel()?null:await shotSrc(k,cur);  // the screenshot, if the report has one and the model takes pictures
+    const ctx=await aiContext(k,cur);
+    try{res=await askAI(cur.word,cur.text,img,ctx)}
     catch(e){
       AIS.err=e.message;AIS.errAt=Date.now();
       if(e.status===429)AIS.pauseTill=Date.now()+(/day|daily/i.test(e.message)?36e5:60000);
@@ -1169,7 +1199,7 @@ function renderAi(main){
   main.append(
     h('div',{className:'pc pset'},
       h('label',{className:'sw'},cb,h('span',{className:'knob'}),h('b',{textContent:'Auto-Check Assist'})),
-      h('small',{className:'mu',textContent:`When a new report arrives, the AI (${aiModel()}) checks it, together with its screenshot. If it says yes, the report is marked Valid in yellow. Only reports that arrive after you switch it on are checked.`}),
+      h('small',{className:'mu',textContent:`When a new report arrives, the AI (${aiModel()}) checks it, together with its screenshot (if the model can read pictures). It learns from how you decided earlier reports and sees the player\u2019s record. If it says yes, the report is marked Valid in yellow. Only reports that arrive after you switch it on are checked.`}),
       h('small',{className:status[0],textContent:status[1]}),
       ...(err&&!(Date.now()<AIS.pauseTill)?[h('small',{className:'bad',textContent:'Last error: '+err}),]:[])),
     ...(canManage()?[aiKeyBox()]:[]),
@@ -1259,6 +1289,9 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['4.3.1','2026-10-29',['Resolved and Denied reports are now deleted 3 seconds after marking instead of 10. Undo works until then']],
+  ['4.3','2026-10-29',['A.F.R: a Player history list at the bottom of every player\u2019s page, straight from Player records: every report they\u2019ve had (also handled and deleted ones) with what happened, who handled it, the word and the message','Click an entry that\u2019s still open to open that report, or \uD83D\uDDBC to see a saved screenshot']],
+  ['4.2','2026-10-29',['AI Assist learns from your Player records: each check includes up to 8 messages the mods validated and 8 they denied (same word first), plus the player\u2019s own earlier record. No names are sent','Model switched to Nemotron 3 Ultra (free)','If the model can\u2019t read pictures, the dashboard remembers it and stops sending the screenshot, so a check isn\u2019t asked twice']],
   ['4.1','2026-10-28',['AI Assist now sends the screenshot with each check, so the AI sees the chat around the flagged message','If the model won\u2019t take the picture, it checks the text only']],
   ['4.0.1','2026-10-28',['AI Assist now always uses Nemotron 3.5 Super VL (free). The model can no longer be changed from the dashboard']],
   ['4.0','2026-10-28',['AI Assist is built into the dashboard: new reports are checked through OpenRouter, no ai-assist.py or Ollama needed','The Creator or an Administrator saves the OpenRouter key (and optionally the model) on the AI Assist tab. It\u2019s kept in the database, not in the dashboard file','Only one open dashboard does the checking at a time, and it slows down by itself to stay inside the free limits','\uD83E\uDDEA Test the AI button, and clear messages when the key, the model or the free limit is the problem']],
@@ -1339,9 +1372,9 @@ const OBS=[
   {v:'home',hl:false,t:()=>`Welcome, ${P[me.k]?.displayName||me.k}!`,b:['This quick tour walks you through every tab and what it’s for.','Use Next and Back (or the arrow keys) to move around. Skip tour ends it.','You can replay it any time with the ? button at the top, or from Profile settings.']},
   {v:'home',t:'Main menu',b:['Messages from staff (broadcasts) show at the very top.','Needs attention: what\u2019s waiting right now. Click a card to jump straight to those reports.','Your stats: how many reports you’ve resolved, denied and marked valid, today, this month, this year and overall.','Reports overview: how many reports are open, handled, or marked valid by the AI.','Flagged words chart: which words get players flagged most. Switch between Reports and Users, and filter by status.','Recent activity: the latest actions taken by everyone.']},
   {v:'afr',t:'A.F.R: flagged players',b:['Every player whose chat got flagged gets a tile here. The number on the tab is how many reports are still open.','Each tile is coloured by its reports: the more reports with one status, the more of the tile that colour. The legend above the tiles shows what each colour means.','Find a player searches names, usernames, IDs and message text. Sort changes the order, for example Waiting longest. Filter shows only one word, one status, or reports that have notes.','Click a player to see all of their reports.']},
-  {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 10 seconds, so click the same button again to cancel.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).','After you mark a report, a notice at the bottom lets you Undo it.','Shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next report, N write a note, Esc close. Use \u2039 \u203A at the top of the panel to move between reports.']},
+  {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 3 seconds, so click the same button again to cancel.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).','After you mark a report, a notice at the bottom lets you Undo it.','Shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next report, N write a note, Esc close. Use \u2039 \u203A at the top of the panel to move between reports.']},
   {v:'afr',t:'Notes and downloads',b:['Notes: chat with the other mods about a report. Enter sends, Shift+Enter makes a new line. Paste, drop or 📎 a picture to attach it. You can delete your own notes.','⬇ Download report saves one report as a Zip or as an HTML Report/Arrest Case file.','On a player’s page, Download all valid grabs every valid report for that player.','Reports without a screenshot are left out of downloads.']},
-  {v:'afr',t:'Export and Resolve all',b:['Export valid saves every valid report as a zip: a folder per player with the screenshots, plus a Report/Arrest Case file with the charges and total time required.','Resolve all valid marks every valid report as Resolved at once. They get deleted after 10 seconds, with a Cancel button at the top.','Tip: export first if you want to keep a copy.']},
+  {v:'afr',t:'Export and Resolve all',b:['Export valid saves every valid report as a zip: a folder per player with the screenshots, plus a Report/Arrest Case file with the charges and total time required.','Resolve all valid marks every valid report as Resolved at once. They get deleted after 3 seconds, with a Cancel button at the top.','Tip: export first if you want to keep a copy.']},
   {v:'ai',t:'AI Assist',b:['Turn on Auto-Check Assist and the AI looks at each new report as it comes in, right from the dashboard (no extra program needed).','If it thinks the report is real, the report is marked AI valid in yellow. Check it yourself before acting on it.','Results shows how many it checked and what it said. Recent checks shows each answer with its reason.','Someone needs to have the dashboard open for checks to happen. Only one open dashboard does the checking at a time.']},
   {v:'launch',t:'Launcher',b:['Launch an account into the game in one click, or tick several and use Launch selected.','Pick bot accounts with the Bots button. Each bot shows whether it’s online, hopping servers or disconnected.','Auto-Call Bot when down relaunches a bot that disconnects or goes quiet for 2 minutes.','Only the Creator and Administrators can add or remove accounts.','Recent launches shows what was launched and whether it worked.']},
   {v:'hist',t:'History',b:['Every action anyone takes on a report: resolved, denied, valid, reopened and deleted.','Each line shows the player, their message, who did it and when.']},
@@ -1755,7 +1788,7 @@ function cancelDel(k){if(pend[k]){clearTimeout(pend[k].id);delete pend[k]}}
 async function resolveAllValid(){
   const vs=Object.keys(D).filter(k=>D[k].status==='valid');
   if(!vs.length)return;
-  if(!confirm(`Mark all ${vs.length} valid report${vs.length>1?'s':''} as Resolved?\n\nLike a normal Resolve, they get deleted 10 seconds later. Tip: use "Export valid" first if you want a copy.`))return;
+  if(!confirm(`Mark all ${vs.length} valid report${vs.length>1?'s':''} as Resolved?\n\nLike a normal Resolve, they get deleted 3 seconds later. Tip: use "Export valid" first if you want a copy.`))return;
   const b=$('#rv');b.disabled=true;b.textContent='Resolving...';
   const up={};for(const k of vs){up[k+'/status']='resolved';up[k+'/aiv']=null}
   try{await api('/reports','PATCH',up)}catch(e){alert(e.message);render();return}
@@ -1767,13 +1800,15 @@ async function resolveAllValid(){
   await Promise.all(vs.map(k=>{const r=D[k]||{};
     return api('/history','POST',{action:'resolved',reportId:k,displayName:r.displayName??null,username:r.username??null,userId:r.userId??null,text:r.text??null,word:r.word??null,...rFields(r),by:me.k,byName:P[me.k]?.displayName??me.k,bulk:true,t:{'.sv':'timestamp'}}).catch(()=>{})}));
   await loadHist();lastStats=0;render()}
+// Resolved and Denied reports are deleted this long after marking (Undo works until then)
+const DEL_MS=3000;
 function schedDel(k){
   cancelDel(k);
-  pend[k]={at:Date.now()+10000,id:setTimeout(async()=>{
+  pend[k]={at:Date.now()+DEL_MS,id:setTimeout(async()=>{
     delete pend[k];
     try{await api('/reports/'+k,'DELETE');api('/images/'+k,'DELETE').catch(()=>{});api('/notes/'+k,'DELETE').catch(()=>{});delete D[k];if(sel===k)closeSide();else render()}
     catch(e){stat(e.message,1)}
-  },10000)}}
+  },DEL_MS)}}
 
 const PUSH='-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
 const pushTime=k=>{let t=0;for(const c of k.slice(0,8))t=t*64+PUSH.indexOf(c);return t};
