@@ -1111,13 +1111,14 @@ async function askAI(word,text,img,ctx){
   return{verdict:v?v[1].toLowerCase():'unsure',reason:(why?why[1]:out||'No answer').trim().slice(0,300),img:!!img}}
 // Takes over the checking if no other open dashboard is doing it
 // What the AI learns from: earlier decisions by the mods (same word first) and this player's own record. No names are sent.
-const AI_EX=8;
-async function aiContext(k,cur){
+// How many validated and how many denied example messages go with each check
+const AI_EX=200;
+async function aiContext(k,cur,n=AI_EX){
   try{if(SET.playersBuilt)await loadPlayers();else if(Date.now()-lastStats>300000)await loadStats()}catch{}
   const all=playerRecords(true),w=String(cur.word||'').toLowerCase(),clip=t=>String(t||'').replace(/\s+/g,' ').trim().slice(0,160);
   const pool=[];for(const p of Object.values(all))for(const x of p.reps)if(x.k!==k&&x.text&&['valid','resolved','denied'].includes(x.s))pool.push(x);
   pool.sort((a,b)=>((String(b.word||'').toLowerCase()===w)-(String(a.word||'').toLowerCase()===w))||(b.at||b.t||0)-(a.at||a.t||0));
-  const pick=yes=>{const seen=new Set(),out=[];for(const x of pool){if((x.s!=='denied')!==yes)continue;const t=clip(x.text).toLowerCase();if(seen.has(t))continue;seen.add(t);out.push(x);if(out.length>=AI_EX)break}return out};
+  const pick=yes=>{const seen=new Set(),out=[];for(const x of pool){if((x.s!=='denied')!==yes)continue;const t=clip(x.text).toLowerCase();if(seen.has(t))continue;seen.add(t);out.push(x);if(out.length>=n)break}return out};
   const ys=pick(true),ns=pick(false),line=x=>`- [${x.word||'?'}] "${clip(x.text)}"`;
   const parts=[];
   if(ys.length||ns.length)parts.push('How the moderators decided earlier reports:',
@@ -1148,8 +1149,9 @@ async function aiTick(){
     AIS.last=Date.now();
     let res;
     const img=AIS.noImg===aiModel()?null:await shotSrc(k,cur);  // the screenshot, if the report has one and the model takes pictures
-    const ctx=await aiContext(k,cur);
-    try{res=await askAI(cur.word,cur.text,img,ctx)}
+    let ctx=await aiContext(k,cur);
+    try{try{res=await askAI(cur.word,cur.text,img,ctx)}
+      catch(e){if(e.status===400&&/context|token|too long|length/i.test(e.message)){ctx=await aiContext(k,cur,40);res=await askAI(cur.word,cur.text,img,ctx)}else throw e}}  // too much for the model: retry with 40+40
     catch(e){
       AIS.err=e.message;AIS.errAt=Date.now();
       if(e.status===429)AIS.pauseTill=Date.now()+(/day|daily/i.test(e.message)?36e5:60000);
@@ -1289,6 +1291,8 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['4.4.1','2026-10-30',['AI Assist now learns from up to 200 validated and 200 denied messages per check (same word first) instead of 8 and 8','If that\u2019s too much for the model, it retries with 40 and 40']],
+  ['4.4','2026-10-29',['Live updates: new reports, deleted reports and status changes show up instantly. Firebase sends only what changed, instead of the dashboard downloading every report every 20 seconds','The header says Live \u00B7 instant while it\u2019s connected. If the live connection drops, it reconnects by itself and uses the old 20-second refresh meanwhile','New-report notices, the sound and desktop notifications now arrive instantly too, even in a background tab']],
   ['4.3.1','2026-10-29',['Resolved and Denied reports are now deleted 3 seconds after marking instead of 10. Undo works until then']],
   ['4.3','2026-10-29',['A.F.R: a Player history list at the bottom of every player\u2019s page, straight from Player records: every report they\u2019ve had (also handled and deleted ones) with what happened, who handled it, the word and the message','Click an entry that\u2019s still open to open that report, or \uD83D\uDDBC to see a saved screenshot']],
   ['4.2','2026-10-29',['AI Assist learns from your Player records: each check includes up to 8 messages the mods validated and 8 they denied (same word first), plus the player\u2019s own earlier record. No names are sent','Model switched to Nemotron 3 Ultra (free)','If the model can\u2019t read pictures, the dashboard remembers it and stops sending the screenshot, so a check isn\u2019t asked twice']],
@@ -1984,16 +1988,49 @@ async function setNotify(on,box){
   ls('notify','1');
   try{new Notification('Desktop notifications are on',{body:'New reports will pop up here while the dashboard is in the background.',tag:'mod-reports-test'})}catch{}
   toast('Desktop notifications on',{kind:'ok'})}
+// New reports since last time: notice, sound and desktop notification
+function newReportCheck(){
+  const keys=Object.keys(D);
+  if(seenKeys){const fresh=keys.filter(k=>!seenKeys.has(k)&&D[k]&&!D[k].status);
+    if(fresh.length){
+      toast(`${fresh.length} new report${fresh.length>1?'s':''}`+(fresh.length===1?`: ${D[fresh[0]].displayName||D[fresh[0]].username}`:''),{action:'View',ms:8000,onAction:()=>showFresh(fresh)});
+      if(ls('ping')==='1')ping();
+      desktopNotify(fresh)}}
+  seenKeys=new Set(keys)}
+// ---------- Live updates: Firebase pushes only what changed in /reports (new, changed or deleted), the moment it happens ----------
+let ES=null,esLive=false,esRetry=null,rcT=null;
+function setPath(parts,v){
+  const k=parts[0];
+  if(parts.length===1){if(v==null)delete D[k];else D[k]=v;return}
+  if(!D[k]){if(v==null)return;D[k]={}}
+  let o=D[k];for(const p of parts.slice(1,-1)){if(o[p]==null||typeof o[p]!=='object'){if(v==null)return;o[p]={}}o=o[p]}
+  const last=parts[parts.length-1];if(v==null)delete o[last];else o[last]=v}
+function reportsChanged(){
+  clearTimeout(rcT);
+  rcT=setTimeout(()=>{newReportCheck();if(sel&&!D[sel])closeSide();else if(!busy())render()},120)}
+function startStream(){
+  if(!me||typeof EventSource!=='function')return;
+  clearTimeout(esRetry);try{ES&&ES.close()}catch{}
+  let es;try{es=new EventSource(`${DB}/reports.json`)}catch{return}
+  ES=es;
+  const on=(ev,patch)=>{
+    let m;try{m=JSON.parse(ev.data)}catch{return}
+    if(!m||typeof m.path!=='string')return;
+    const parts=m.path.split('/').filter(Boolean);
+    if(patch){for(const[sub,v]of Object.entries(m.data||{}))setPath([...parts,...sub.split('/').filter(Boolean)],v)}
+    else if(!parts.length)D=m.data&&typeof m.data==='object'?m.data:{};
+    else setPath(parts,m.data);
+    esLive=true;loaded=true;lastLoad=Date.now();if(stBad)stat('Live');reportsChanged()};
+  es.addEventListener('put',e=>on(e,false));
+  es.addEventListener('patch',e=>on(e,true));
+  es.addEventListener('keep-alive',()=>{lastLoad=Date.now()});
+  es.addEventListener('cancel',()=>{esLive=false;try{es.close()}catch{};esRetry=setTimeout(startStream,30000)});  // refused by the rules: back to polling, try again later
+  es.onerror=()=>{esLive=false;if(es.readyState===2)esRetry=setTimeout(startStream,5000)}}  // the browser reconnects by itself; if it gave up, start again
 async function loadInner(){
   if(!me)return;
-  try{D=await api('/reports')||{};stat('Live');loaded=true;lastLoad=Date.now()}catch(e){stat(e.message,1);if(!loaded)render();return}
-  {const keys=Object.keys(D);
-    if(seenKeys){const fresh=keys.filter(k=>!seenKeys.has(k)&&!D[k].status);
-      if(fresh.length){
-        toast(`${fresh.length} new report${fresh.length>1?'s':''}`+(fresh.length===1?`: ${D[fresh[0]].displayName||D[fresh[0]].username}`:''),{action:'View',ms:8000,onAction:()=>showFresh(fresh)});
-        if(ls('ping')==='1')ping();
-        desktopNotify(fresh)}}
-    seenKeys=new Set(keys)}
+  // Reports come in live through the stream; this full download is only the fallback when the stream is down
+  if(!esLive){try{D=await api('/reports')||{};stat('Live');loaded=true;lastLoad=Date.now()}catch(e){stat(e.message,1);if(!loaded)render();return}
+    newReportCheck()}
   try{P=await api('/profiles')||{}}catch{}
   if(guard(P[me.k]))return;
   try{B=await api('/broadcasts')||{}}catch{}
@@ -2030,7 +2067,7 @@ addEventListener('click',()=>{if(fOpen){fOpen=false;paintFlt()}if(bOpen){bOpen=f
 setInterval(load,20000);
 setInterval(()=>{if(!document.hidden&&me&&view==='launch')loadLauncher().then(()=>{if(view==='launch'&&!busy())render()})},5000);
 setInterval(()=>{const n=$('#dl');if(n&&pend[sel])n.textContent=dlText(sel);paintCd();
-  if(!stBad&&lastLoad&&!loading){const x=Date.now()-lastLoad;$('#st').textContent='Live \u00B7 '+(x<5000?'just now':ago(lastLoad))}},1000);
+  if(!stBad&&lastLoad&&!loading){const x=Date.now()-lastLoad;$('#st').textContent=esLive?'Live \u00B7 instant':'Live \u00B7 '+(x<5000?'just now':ago(lastLoad))}},1000);
 function paintCd(){
   const ks=Object.keys(pend),c=$('#cd');if(!c)return;
   if(ks.length<2){c.hidden=true;return}
@@ -2045,7 +2082,7 @@ function enter(k,rec,kn){
   if(banOn(rec.ban)){ls('me',null);showLogin();return err(banMsg(rec.ban))}
   kn??=rec.kickN||0;
   if((rec.kickN||0)>kn){ls('me',null);showLogin();return err(kickMsg(rec.kick)+' Sign in again.')}
-  me={k,kn};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass,kn}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load();obCheck(k,rec)}
+  me={k,kn};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass,kn}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load();startStream();obCheck(k,rec)}
 function signout(){ls('me',null);location.reload()}
 function showLogin(){$('#login').hidden=false;const m=ls('kickmsg');if(m){ls('kickmsg',null);err(m)}}
 $('#mk').onclick=()=>setMode(mode==='in'?'new':'in');
