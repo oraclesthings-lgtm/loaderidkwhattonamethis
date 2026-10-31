@@ -18,7 +18,7 @@ button:disabled{opacity:.55;cursor:default}
 [hidden]{display:none!important}
 .mu{color:var(--mu)}
 
-#nav{position:fixed;left:0;top:0;bottom:0;width:208px;padding:16px 12px;display:flex;flex-direction:column;gap:6px;z-index:6;
+#nav{position:fixed;left:0;top:0;bottom:0;width:208px;overflow-y:auto;padding:16px 12px;display:flex;flex-direction:column;gap:6px;z-index:6;
   background:linear-gradient(180deg,#10163a,#0a0e18 70%);border-right:1px solid var(--line)}
 .brand{font-weight:700;font-size:17px;padding:4px 10px 14px}
 .nv{position:relative;text-align:left;background:none;border:1px solid transparent;padding:10px 12px;border-radius:8px}
@@ -310,6 +310,9 @@ header button{padding:7px 10px}
 .row.hlink{cursor:pointer}
 .row.hlink:hover{border-color:var(--ac)}
 .row.sel{outline:2px solid var(--ac)}
+.chat-wrap{display:grid;gap:8px;max-width:820px}
+.chl{max-height:none;height:calc(100vh - 230px);min-height:260px}
+@media(max-width:760px){.chl{height:calc(100vh - 280px)}}
 </style>
 </head>
 <body>
@@ -350,8 +353,8 @@ const $=s=>document.querySelector(s);
 const h=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);e.append(...k);return e};
 let D={},H={},view='home',user=null,sel=null,T,hErr=false,P={},HA={},me=null,lastStats=0,SET={},flt={type:null,val:null},fOpen=false,fLvl='root',LCH={},BOT={},B={},W={},ML={},modErr='',modOpen=null,loading=false,loaded=false,lastLoad=0,stBad=false,seenKeys=null,hf={a:'all',mine:false,q:''},RPT={},BRP={},BRL={},brOpen=null,brq='',rptErr='';
 
-const TITLE={home:'Main menu',afr:'A.F.R',ai:'AI Assist',launch:'Launcher',hist:'History',plist:'Player records',brep:'Banned Reporters',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation',dbg:'Debug'};
-const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['ai','AI Assist','Auto-check with AI'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['plist','Player records','Everyone who\u2019s been reported'],['brep','Banned Reporters','Scanners blocked from reporting'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed'],['dbg','Debug','Creator only: test reports']];
+const TITLE={home:'Main menu',afr:'A.F.R',chat:'Chat',ai:'AI Assist',launch:'Launcher',hist:'History',plist:'Player records',brep:'Banned Reporters',all:'All profiles',prof:'Profile settings',log:'Changelogs',bc:'Broadcast',mod:'Moderation',dbg:'Debug'};
+const NAV=[['home','Main menu','Overview and your stats'],['afr','A.F.R','Automated flagged reports'],['chat','Chat','Talk with the other mods'],['ai','AI Assist','Auto-check with AI'],['launch','Launcher','Roblox Account Manager'],['hist','History','Every action taken'],['plist','Player records','Everyone who\u2019s been reported'],['brep','Banned Reporters','Scanners blocked from reporting'],['all','All profiles','Everyone\u2019s stats'],['prof','Profile settings','Picture and privacy'],['bc','Broadcast','Messages on the Main menu'],['mod','Moderation','Warn, kick and ban'],['log','Changelogs','What changed'],['dbg','Debug','Creator only: test reports']];
 // Tabs only the Creator and Administrators can see or open
 const STAFF=new Set(['bc','mod']);
 // Tabs only the Creator can see or open
@@ -418,12 +421,14 @@ function paintNav(){
     ...NAV.filter(([id])=>(!STAFF.has(id)||canManage())&&(!CREATOR_ONLY.has(id)||isCreator(me.k))).map(([id,t,s])=>h('button',{className:'nv'+(view===id?' on':'')+(obHl()===id?' ob':''),onclick:()=>go(id)},
       h('b',{textContent:t}),h('small',{textContent:s}),
       ...(id==='afr'&&open?[h('span',{className:'bd',textContent:open})]:[]),
+      ...(id==='chat'&&chatUnread()?[h('span',{className:'bd',title:'Unread messages',textContent:chatUnread()}),]:[]),
       ...(id==='brep'&&Object.keys(BRP).length?[h('span',{className:'bd',title:'Blocked reporters',textContent:Object.keys(BRP).length})]:[]))),
     h('div',{className:'me'},av(P[me.k],34),h('b',{textContent:P[me.k]?.displayName||me.k},roleTag(me.k)),h('button',{textContent:'Sign out',onclick:signout})))}
 
 function render(){
   if(STAFF.has(view)&&!canManage())view='home';
   if(CREATOR_ONLY.has(view)&&!isCreator(me.k))view='home';
+  if(view==='chat')chatSeenNow();
   paintNav();
   const main=$('#main');main.replaceChildren();
   $('#title').textContent=TITLE[view];
@@ -431,7 +436,7 @@ function render(){
   $('#q').hidden=!(view==='afr'&&!user);
   $('#sort').hidden=!(view==='afr'&&!user);
   $('#ex').hidden=view!=='afr';{const n=Object.values(D).filter(r=>r.status==='valid').length;$('#rv').hidden=view!=='afr';$('#rv').disabled=!n;$('#rv').textContent=`✅ Resolve all valid (${n})`}$('#fw').hidden=view!=='afr';$('#ex').textContent=`Export valid (${Object.values(D).filter(r=>r.status==='valid').length})`;
-  ({home:renderHome,afr:renderAfr,hist:renderHist,plist:renderPlist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod,brep:renderBrep,dbg:renderDbg}[view])(main);
+  ({home:renderHome,afr:renderAfr,hist:renderHist,plist:renderPlist,all:renderAll,prof:renderProf,ai:renderAi,launch:renderLaunch,log:renderLog,bc:renderBc,mod:renderMod,brep:renderBrep,chat:renderChat,dbg:renderDbg}[view])(main);
   paintSnav()}
 
 function renderHome(main){
@@ -1291,6 +1296,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['4.5','2026-10-31',['New Chat tab: one shared chat for the mods. Messages arrive instantly, with an unread badge on the tab and a notice when you\u2019re on another tab','Only the newest 30 messages are kept, older ones are deleted','Delete your own messages (the Creator can delete any)']],
   ['4.4.1','2026-10-30',['AI Assist now learns from up to 200 validated and 200 denied messages per check (same word first) instead of 8 and 8','If that\u2019s too much for the model, it retries with 40 and 40']],
   ['4.4','2026-10-29',['Live updates: new reports, deleted reports and status changes show up instantly. Firebase sends only what changed, instead of the dashboard downloading every report every 20 seconds','The header says Live \u00B7 instant while it\u2019s connected. If the live connection drops, it reconnects by itself and uses the old 20-second refresh meanwhile','New-report notices, the sound and desktop notifications now arrive instantly too, even in a background tab']],
   ['4.3.1','2026-10-29',['Resolved and Denied reports are now deleted 3 seconds after marking instead of 10. Undo works until then']],
@@ -1375,6 +1381,7 @@ let OB=null;
 const OBS=[
   {v:'home',hl:false,t:()=>`Welcome, ${P[me.k]?.displayName||me.k}!`,b:['This quick tour walks you through every tab and what it’s for.','Use Next and Back (or the arrow keys) to move around. Skip tour ends it.','You can replay it any time with the ? button at the top, or from Profile settings.']},
   {v:'home',t:'Main menu',b:['Messages from staff (broadcasts) show at the very top.','Needs attention: what\u2019s waiting right now. Click a card to jump straight to those reports.','Your stats: how many reports you’ve resolved, denied and marked valid, today, this month, this year and overall.','Reports overview: how many reports are open, handled, or marked valid by the AI.','Flagged words chart: which words get players flagged most. Switch between Reports and Users, and filter by status.','Recent activity: the latest actions taken by everyone.']},
+  {v:'chat',t:'Chat',b:['One shared chat for all the mods. New messages show up instantly, with a badge on the tab.','Enter sends, Shift+Enter makes a new line. You can delete your own messages.','Only the newest 30 messages are kept.']},
   {v:'afr',t:'A.F.R: flagged players',b:['Every player whose chat got flagged gets a tile here. The number on the tab is how many reports are still open.','Each tile is coloured by its reports: the more reports with one status, the more of the tile that colour. The legend above the tiles shows what each colour means.','Find a player searches names, usernames, IDs and message text. Sort changes the order, for example Waiting longest. Filter shows only one word, one status, or reports that have notes.','Click a player to see all of their reports.']},
   {v:'afr',t:'Handling a report',b:['Click a report to open it on the right: screenshot, display name, username, user ID and the message.','Click the screenshot to zoom: scroll or pinch to zoom, drag to move, Esc to close.','✅ Resolved: dealt with. ❌ Denied: not a real violation. Both delete the report after 3 seconds, so click the same button again to cancel.','👍 Valid: a real violation that nobody can act on right now. It stays until someone resolves it, and you keep the credit.','🗑 Delete removes it straight away (wait 2 seconds, then confirm).','After you mark a report, a notice at the bottom lets you Undo it.','Shortcuts while a report is open: V valid, R resolved, D denied, \u2190 \u2192 previous/next report, N write a note, Esc close. Use \u2039 \u203A at the top of the panel to move between reports.']},
   {v:'afr',t:'Notes and downloads',b:['Notes: chat with the other mods about a report. Enter sends, Shift+Enter makes a new line. Paste, drop or 📎 a picture to attach it. You can delete your own notes.','⬇ Download report saves one report as a Zip or as an HTML Report/Arrest Case file.','On a player’s page, Download all valid grabs every valid report for that player.','Reports without a screenshot are left out of downloads.']},
@@ -1997,6 +2004,74 @@ function newReportCheck(){
       if(ls('ping')==='1')ping();
       desktopNotify(fresh)}}
   seenKeys=new Set(keys)}
+// ---------- Chat: one shared chat for the mods. Only the newest 30 messages are kept. ----------
+const CHAT_KEEP=30;
+let CH={},chES=null,chLive=false,chInit=false,chErr='',chSeen=null,chRetry=null;
+const chatList=()=>Object.entries(CH).filter(([,m])=>m&&typeof m.text==='string').sort((a,b)=>a[0]<b[0]?-1:1).slice(-CHAT_KEEP);
+const chatUnread=()=>{if(!me)return 0;const s=chSeen??ls('chatSeen')??'';return chatList().filter(([k,m])=>k>s&&m.by!==me.k).length};
+function chatSeenNow(){const l=chatList();if(l.length){chSeen=l.at(-1)[0];ls('chatSeen',chSeen)}}
+// Something new came in: shows it, or puts a badge on the tab and a notice
+function chatNew(before){
+  const fresh=chatList().filter(([k,m])=>!before.has(k)&&m.by!==me?.k);
+  if(view==='chat'){chatSeenNow();paintChat()}
+  else if(fresh.length&&chInit){const[,m]=fresh.at(-1);
+    toast(`💬 ${P[m.by]?.displayName||m.byName||m.by}: ${m.text.slice(0,120)}`,{action:'Open',ms:6000,onAction:()=>go('chat')});
+    if(ls('ping')==='1')ping()}
+  paintNav()}
+async function loadChat(){
+  const before=new Set(Object.keys(CH));
+  try{CH=await api('/chat','GET',undefined,'orderBy=%22%24key%22&limitToLast='+CHAT_KEEP)||{};chErr=''}catch(e){chErr=e.message;return}
+  chatNew(before);chInit=true}
+function chatApply(path,data,patch){
+  const parts=path.split('/').filter(Boolean);
+  const set=(ps,v)=>{if(!ps.length){CH=v&&typeof v==='object'?v:{};return}
+    const k=ps[0];if(ps.length===1){if(v==null)delete CH[k];else CH[k]=v;return}
+    if(!CH[k]){if(v==null)return;CH[k]={}}let o=CH[k];for(const p of ps.slice(1,-1)){if(o[p]==null||typeof o[p]!=='object')o[p]={};o=o[p]}
+    if(v==null)delete o[ps.at(-1)];else o[ps.at(-1)]=v};
+  if(patch)for(const[sub,v]of Object.entries(data||{}))set([...parts,...sub.split('/').filter(Boolean)],v);else set(parts,data)}
+function startChatStream(){
+  if(!me||typeof EventSource!=='function')return;
+  clearTimeout(chRetry);try{chES&&chES.close()}catch{}
+  let es;try{es=new EventSource(`${DB}/chat.json`)}catch{return}
+  chES=es;
+  const on=(ev,patch)=>{let m;try{m=JSON.parse(ev.data)}catch{return}if(!m||typeof m.path!=='string')return;
+    const before=new Set(Object.keys(CH));chatApply(m.path,m.data,patch);chLive=true;chErr='';chatNew(before);chInit=true};
+  es.addEventListener('put',e=>on(e,false));
+  es.addEventListener('patch',e=>on(e,true));
+  es.addEventListener('cancel',()=>{chLive=false;try{es.close()}catch{};chRetry=setTimeout(startChatStream,30000)});
+  es.onerror=()=>{chLive=false;if(es.readyState===2)chRetry=setTimeout(startChatStream,5000)}}
+async function sendChat(text){
+  text=String(text||'').trim().slice(0,500);if(!text)return false;
+  try{const r=await api('/chat','POST',{by:me.k,byName:P[me.k]?.displayName||me.k,text,t:{'.sv':'timestamp'}});
+    if(r?.name&&!CH[r.name])CH[r.name]={by:me.k,byName:P[me.k]?.displayName||me.k,text,t:Date.now()};
+    // keep only the newest 30
+    const ks=Object.keys(await api('/chat','GET',undefined,'shallow=true')||{}).sort();
+    if(ks.length>CHAT_KEEP){const up={};for(const k of ks.slice(0,ks.length-CHAT_KEEP)){up[k]=null;delete CH[k]}await api('/chat','PATCH',up).catch(()=>{})}
+    chatSeenNow();paintChat();return true}
+  catch(e){alert(e.message+(/denied/i.test(e.message)?'. Add the /chat rule in Firebase.':''));return false}}
+function chatMsg([k,m]){
+  const p=P[m.by],mine=m.by===me.k;
+  return h('div',{className:'note'+(mine?' mine':'')},av(p||{displayName:m.byName},28),
+    h('div',{className:'nb'},h('small',{},h('b',{textContent:p?.displayName||m.byName||m.by},roleTag(m.by)),h('span',{textContent:m.t?when(m.t):'',title:m.t?new Date(m.t).toLocaleString():''}),
+      ...(mine||isCreator(me.k)?[h('button',{className:'nx',textContent:'✕',title:mine?'Delete my message':'Delete this message',onclick:()=>{if(confirm('Delete this message?'))api('/chat/'+k,'DELETE').then(()=>{delete CH[k];paintChat()}).catch(e=>alert(e.message))}})]:[])),
+      h('div',{className:'nt',textContent:m.text})))}
+function paintChat(){
+  const box=$('#chl');if(!box)return;
+  const near=box.scrollHeight-box.scrollTop-box.clientHeight<60,l=chatList();
+  box.replaceChildren(...(chErr&&!l.length?[h('p',{className:'bad',textContent:chErr+'. Add the /chat rule in Firebase.'})]
+    :l.length?l.map(chatMsg):[h('small',{className:'mu',textContent:'No messages yet. Say hi to the other mods.'})]));
+  if(near||!paintChat.done){box.scrollTop=box.scrollHeight;paintChat.done=true}}
+function renderChat(main){
+  chatSeenNow();paintChat.done=false;
+  const ta=h('textarea',{placeholder:'Message the other mods... (Enter sends, Shift+Enter for a new line)',maxLength:500});
+  const send=h('button',{className:'nx2',textContent:'Send'});
+  const go1=async()=>{if(!ta.value.trim())return;send.disabled=ta.disabled=true;if(await sendChat(ta.value))ta.value='';send.disabled=ta.disabled=false;ta.focus()};
+  send.onclick=go1;ta.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();go1()}};
+  main.append(h('div',{className:'chat-wrap'},
+    h('small',{className:'mu',textContent:`Only the newest ${CHAT_KEEP} messages are kept, older ones are deleted. Everyone signed in can read it.`}),
+    h('div',{className:'notes chl',id:'chl'}),
+    h('div',{className:'nin'},ta,send)));
+  paintChat();setTimeout(()=>ta.focus())}
 // ---------- Live updates: Firebase pushes only what changed in /reports (new, changed or deleted), the moment it happens ----------
 let ES=null,esLive=false,esRetry=null,rcT=null;
 function setPath(parts,v){
@@ -2035,6 +2110,7 @@ async function loadInner(){
   if(guard(P[me.k]))return;
   try{B=await api('/broadcasts')||{}}catch{}
   await loadReporters();
+  if(!chLive)await loadChat();
   if(view==='mod')await loadMod();
   if(view==='brep')await loadBrep();
   checkWarns();
@@ -2082,7 +2158,7 @@ function enter(k,rec,kn){
   if(banOn(rec.ban)){ls('me',null);showLogin();return err(banMsg(rec.ban))}
   kn??=rec.kickN||0;
   if((rec.kickN||0)>kn){ls('me',null);showLogin();return err(kickMsg(rec.kick)+' Sign in again.')}
-  me={k,kn};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass,kn}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load();startStream();obCheck(k,rec)}
+  me={k,kn};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass,kn}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load();startStream();startChatStream();obCheck(k,rec)}
 function signout(){ls('me',null);location.reload()}
 function showLogin(){$('#login').hidden=false;const m=ls('kickmsg');if(m){ls('kickmsg',null);err(m)}}
 $('#mk').onclick=()=>setMode(mode==='in'?'new':'in');
