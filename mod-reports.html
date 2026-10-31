@@ -324,6 +324,19 @@ header button{padding:7px 10px}
 .gifs img{width:100%;height:90px;object-fit:cover;border-radius:4px;cursor:pointer;background:#000}
 .gifs img:hover{outline:2px solid var(--ac)}
 .chat-wrap.over .chl{outline:2px dashed var(--ac)}
+.shr{margin-top:8px;width:100%}
+.cref{margin-top:6px;padding:8px 10px;border:1px solid #6f8cff55;border-left:3px solid var(--ac);border-radius:8px;background:#0e1420;cursor:pointer;display:grid;gap:6px;max-width:420px}
+.cref:hover{border-color:var(--ac)}
+.cref .crh{display:flex;gap:8px;align-items:center}
+.cref .crh .rb small{display:block}
+.cref .m{margin-top:0}
+.cref.sm{max-width:none}
+.crs .cimg{margin-top:0}
+.rpv{display:block!important}.rpv[hidden]{display:none!important}
+.rpv .nx{top:6px;right:6px}
+.rlist{display:grid;gap:2px;max-height:300px;overflow:auto}
+.rlist .it{display:block;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:7px 9px}
+.rlist .it:hover{background:#ffffff12}
 </style>
 </head>
 <body>
@@ -918,6 +931,7 @@ function paintSide(){
     h('small',{id:'dl',className:'mu',textContent:pend[sel]?dlText(sel):''}),
     h('div',{className:'acts'},del,can),
     dlPicker((k=>()=>D[k]?[[k,D[k]]]:[])(sel),`report-${r.username||r.userId}-${sel}`,'⬇ Download report'),
+    h('button',{className:'shr',textContent:'\uD83D\uDCAC Share in chat',title:'Post this report (with its screenshot) in the Chat',onclick:(k=>()=>{chRef=refOf(k);go('chat')})(sel)}),
     h('small',{className:'keys'},'Shortcuts: ',kbd('V'),' valid  ',kbd('R'),' resolved  ',kbd('D'),' denied  ',kbd('\u2190'),kbd('\u2192'),' previous/next  ',kbd('N'),' note  ',kbd('Esc'),' close'));
   paintSnav();
   if(!src){const id=sel;
@@ -1307,6 +1321,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['4.7','2026-10-31',['Share reports in Chat: \uD83D\uDCAC Share in chat in the report panel, or \uD83D\uDCC4 in the chat to pick a current report','Shared reports show as a card with the player, the word, the message and the screenshot. Click it to open the report (or the player in Player records once it\u2019s handled)','After the report is deleted, the screenshot still shows if it was saved to the evidence channel']],
   ['4.6','2026-10-31',['Chat: send pictures with \uD83D\uDCCE, by pasting them or by dropping them in (GIF files stay animated if they\u2019re small)','Chat: tenor.com and giphy.com links and direct picture links show as the GIF or picture, like Discord','\uD83C\uDF9E GIF search in Chat through GIPHY (the Creator or an Administrator adds a free GIPHY key in Profile settings)','Administrators can now delete any chat message too']],
   ['4.5.1','2026-10-31',['Chat: messages sit right under each other instead of spreading out when there are only a few']],
   ['4.5','2026-10-31',['New Chat tab: one shared chat for the mods. Messages arrive instantly, with an unread badge on the tab and a notice when you\u2019re on another tab','Only the newest 30 messages are kept, older ones are deleted','Delete your own messages (the Creator can delete any)']],
@@ -2029,7 +2044,7 @@ function chatNew(before){
   const fresh=chatList().filter(([k,m])=>!before.has(k)&&m.by!==me?.k);
   if(view==='chat'){chatSeenNow();paintChat()}
   else if(fresh.length&&chInit){const[,m]=fresh.at(-1);
-    toast(`💬 ${P[m.by]?.displayName||m.byName||m.by}: ${m.text?m.text.slice(0,120):'sent a picture'}`,{action:'Open',ms:6000,onAction:()=>go('chat')});
+    toast(`💬 ${P[m.by]?.displayName||m.byName||m.by}: ${m.text?m.text.slice(0,120):m.ref?'shared a report':'sent a picture'}`,{action:'Open',ms:6000,onAction:()=>go('chat')});
     if(ls('ping')==='1')ping()}
   paintNav()}
 async function loadChat(){
@@ -2054,9 +2069,9 @@ function startChatStream(){
   es.addEventListener('patch',e=>on(e,true));
   es.addEventListener('cancel',()=>{chLive=false;try{es.close()}catch{};chRetry=setTimeout(startChatStream,30000)});
   es.onerror=()=>{chLive=false;if(es.readyState===2)chRetry=setTimeout(startChatStream,5000)}}
-async function sendChat(text,img){
-  text=String(text||'').trim().slice(0,500);if(!text&&!img)return false;
-  const msg={by:me.k,byName:P[me.k]?.displayName||me.k,text,...(img?{img}:{}),t:{'.sv':'timestamp'}};
+async function sendChat(text,img,ref){
+  text=String(text||'').trim().slice(0,500);if(!text&&!img&&!ref)return false;
+  const msg={by:me.k,byName:P[me.k]?.displayName||me.k,text,...(img?{img}:{}),...(ref?{ref}:{}),t:{'.sv':'timestamp'}};
   try{const r=await api('/chat','POST',msg);
     if(r?.name&&!CH[r.name])CH[r.name]={...msg,t:Date.now()};
     // keep only the newest 30
@@ -2077,6 +2092,39 @@ function chatEmbed(u){
   if((m=/^https:\/\/(?:www\.)?giphy\.com\/(?:gifs|stickers)\/(?:[\w-]*-)?([A-Za-z0-9]{8,})\/?(?:[?#]\S*)?$/.exec(u)))return{img:`https://media.giphy.com/media/${m[1]}/giphy.gif`};
   if(CHAT_IMG_HOST.test(u)||/^https:\/\/[^\s?#]+\.(?:gif|png|jpe?g|webp)(?:[?#]\S*)?$/i.test(u))return{img:u};
   return null}
+// ---------- Reports shared in the chat ----------
+let chRef=null;const SHOT_CACHE={};
+const refOf=k=>{const r=D[k];if(!r)return null;return{k,pid:String(r.userId??r.username),name:r.displayName||null,user:r.username||null,uid:r.userId??null,word:r.word||null,text:String(r.text||'').slice(0,300)}};
+// The screenshot for a shared report: from the database while the report exists, else from the evidence channel
+async function refShot(ref){
+  if(SHOT_CACHE[ref.k])return SHOT_CACHE[ref.k];
+  let u=null;
+  if(D[ref.k])u=await shotSrc(ref.k,D[ref.k]);
+  if(!u){const x=PLR?.[ref.pid]?.r?.[ref.k]||{},sh=D[ref.k]?.shot||x.shot;if(sh?.mid)u=await freshShot(ref.pid,ref.k,sh)}
+  if(u)SHOT_CACHE[ref.k]=u;return u}
+function openRef(ref){
+  if(D[ref.k]){flt={type:null,val:null};paintFlt();go('afr');user=String(D[ref.k].userId??D[ref.k].username);openSide(ref.k)}
+  else{go('plist');plOpen=ref.pid;pf.q='';setTimeout(()=>{paintPlist();$('#pl .prec.on')?.scrollIntoView({block:'center'})},400)}}
+function refCard(ref,small){
+  const r=D[ref.k],st=r?(r.aiv?'ai':r.status||'open'):(PLR?.[ref.pid]?.r?.[ref.k]?.s||'handled');
+  const lb={open:'Unchecked',valid:'Valid',ai:'AI valid',resolved:'Resolved',denied:'Denied',deleted:'Deleted',handled:'Handled'}[st]||st;
+  const shot=h('div',{className:'crs'},h('small',{className:'mu',textContent:'Loading screenshot...'}));
+  const card=h('div',{className:'cref'+(small?' sm':''),title:r?'Open this report':'Open this player in Player records',onclick:e=>{if(e.target.closest('img,.nx'))return;openRef(ref)}},
+    h('div',{className:'crh'},head(ref.uid??ref.pid,small?26:32,ref.name||ref.user),h('div',{className:'rb'},
+      h('b',{textContent:`${ref.name||ref.user||'?'} (@${ref.user||'?'})`}),
+      h('small',{className:'mu',textContent:(ref.word?`Flagged for \u201C${ref.word}\u201D \u00B7 `:'')+lb+(r?'':' \u00B7 no longer in A.F.R')}))),
+    h('div',{className:'m'},hl(ref.text||'',ref.word)),...(small?[]:[shot]));
+  if(!small)refShot(ref).then(u=>shot.replaceChildren(u?h('img',{className:'cimg',src:u,referrerPolicy:'no-referrer',title:'Click to zoom',onclick:()=>openZoom(u)}):h('small',{className:'mu',textContent:'No screenshot saved for this report.'}))).catch(()=>shot.replaceChildren(h('small',{className:'mu',textContent:'No screenshot.'})));
+  return card}
+// Picker for the chat: current reports to share
+function refPicker(onPick){
+  const q=h('input',{placeholder:'Search current reports (name, @username, message)',spellcheck:false}),list=h('div',{className:'rlist'});
+  const box=h('div',{className:'gifp'},q,list);
+  const show=()=>{const t=q.value.trim().toLowerCase().replace(/^@/,'');
+    const rs=Object.entries(D).filter(([,r])=>!r.test&&(!t||[r.displayName,r.username,r.userId,r.text,r.word].join(' ').toLowerCase().includes(t))).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,40);
+    list.replaceChildren(...(rs.length?rs.map(([k,r])=>h('button',{className:'it',onclick:()=>onPick(k)},h('b',{textContent:`${r.displayName||r.username} (@${r.username||'?'})`}),
+      h('small',{className:'mu',textContent:` ${r.word?'\u201C'+r.word+'\u201D \u00B7 ':''}${String(r.text||'').slice(0,70)} \u00B7 ${ago(pushTime(k))}`}))):[h('small',{className:'mu',textContent:'No current reports match.'})]))};
+  q.oninput=show;q.onkeydown=e=>{if(e.key==='Escape')box.remove()};setTimeout(()=>{q.focus();show()});return box}
 function chatBody(m){
   const out=[],text=m.text||'',urls=text.match(/https:\/\/[^\s<>"']+/g)||[],embeds=urls.map(chatEmbed).filter(Boolean).slice(0,4);
   const onlyLink=urls.length===1&&text.trim()===urls[0]&&embeds.length===1;
@@ -2085,6 +2133,7 @@ function chatBody(m){
     t.append(text.slice(last));out.push(t)}
   const pic=src=>h('img',{className:'cimg',src,loading:'lazy',referrerPolicy:'no-referrer',title:'Click to zoom',onclick:()=>openZoom(src),
     onerror(){this.replaceWith(h('small',{className:'mu',textContent:'(picture couldn’t load)'}))}});
+  if(m.ref&&m.ref.k)out.push(refCard(m.ref));
   if(m.img&&/^data:image\//.test(m.img))out.push(pic(m.img));
   for(const e of embeds)out.push(e.img?pic(e.img):h('iframe',{className:'cgif',src:e.frame,loading:'lazy',referrerPolicy:'no-referrer',title:'GIF'}));
   return out}
@@ -2130,21 +2179,27 @@ function giphyBox(){
 function renderChat(main){
   chatSeenNow();paintChat.done=false;
   let pic=null;
+  const refBox=h('div',{className:'npv rpv',hidden:!chRef});
+  const setRef=k=>{chRef=k?refOf(k):null;refBox.hidden=!chRef;refBox.replaceChildren(...(chRef?[refCard(chRef,true),h('button',{className:'nx',textContent:'\u2715',title:'Don\u2019t share this report',onclick:()=>setRef(null)})]:[]))};
+  setRef(chRef?.k);
   const ta=h('textarea',{placeholder:'Message the other mods... (Enter sends, Shift+Enter for a new line, paste a picture or a GIF link)',maxLength:500});
   const prev=h('div',{className:'npv',hidden:true});
   const setPic=d=>{pic=d;prev.hidden=!d;prev.replaceChildren(...(d?[h('img',{src:d,onclick:()=>openZoom(d)}),h('button',{className:'nx',textContent:'✕',title:'Remove picture',onclick:()=>setPic(null)})]:[]))};
   const addFile=async f=>{try{const d=await chatPic(f);if(d.length>480000)throw new Error('That picture is too big, even after shrinking.');setPic(d)}catch(e){alert(e.message)}};
   const file=h('input',{type:'file',accept:'image/*',hidden:true,onchange:()=>{addFile(file.files[0]);file.value=''}});
   const send=h('button',{className:'nx2',textContent:'Send'});
-  const go1=async(gifUrl)=>{const t=gifUrl||ta.value;if(!String(t).trim()&&!pic)return;send.disabled=ta.disabled=true;
-    if(await sendChat(t,gifUrl?null:pic)){if(!gifUrl){ta.value='';setPic(null)}}send.disabled=ta.disabled=false;ta.focus()};
+  const go1=async(gifUrl)=>{const t=gifUrl||ta.value;if(!String(t).trim()&&!pic&&!chRef)return;send.disabled=ta.disabled=true;
+    if(await sendChat(t,gifUrl?null:pic,gifUrl?null:chRef)){if(!gifUrl){ta.value='';setPic(null);setRef(null)}}send.disabled=ta.disabled=false;ta.focus()};
   send.onclick=()=>go1();ta.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();go1()}};
   ta.onpaste=e=>{const f=[...(e.clipboardData?.files||[])].find(f=>/^image\//.test(f.type));if(f){e.preventDefault();addFile(f)}};
   const gb=h('button',{textContent:'🎞',title:'GIFs'}),comp=h('div',{className:'ccomp'});
   gb.onclick=e=>{e.stopPropagation();if(!giphyOn())return toast(canManage()?'Add a GIPHY key in Profile settings to search GIFs. Pasting a tenor.com or giphy.com link works already.':'GIF search isn’t set up yet. Paste a tenor.com or giphy.com link instead.',{ms:7000});
     const old=comp.querySelector('.gifp');if(old){old.remove();gifOpen=false;return}
     gifOpen=true;comp.prepend(gifPicker(u=>{comp.querySelector('.gifp')?.remove();gifOpen=false;go1(u)}))};
-  comp.append(prev,h('div',{className:'nin'},h('button',{textContent:'📎',title:'Send a picture',onclick:()=>file.click()}),gb,file,ta,send));
+  const rb=h('button',{textContent:'\uD83D\uDCC4',title:'Share a report'});
+  rb.onclick=e=>{e.stopPropagation();const old=comp.querySelector('.gifp');if(old){old.remove();if(old.querySelector('.rlist'))return}
+    comp.prepend(refPicker(k=>{comp.querySelector('.gifp')?.remove();setRef(k);ta.focus()}))};
+  comp.append(refBox,prev,h('div',{className:'nin'},h('button',{textContent:'📎',title:'Send a picture',onclick:()=>file.click()}),gb,rb,file,ta,send));
   const wrap=h('div',{className:'chat-wrap'},
     h('small',{className:'mu',textContent:`Only the newest ${CHAT_KEEP} messages are kept, older ones are deleted. Everyone signed in can read it.`}),
     h('div',{className:'notes chl',id:'chl'}),comp);
