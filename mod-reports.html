@@ -311,8 +311,19 @@ header button{padding:7px 10px}
 .row.hlink:hover{border-color:var(--ac)}
 .row.sel{outline:2px solid var(--ac)}
 .chat-wrap{display:grid;gap:8px;max-width:820px}
-.chl{max-height:none;height:calc(100vh - 230px);min-height:260px}
+.chl{max-height:none;height:calc(100vh - 230px);min-height:260px;align-content:start}
 @media(max-width:760px){.chl{height:calc(100vh - 280px)}}
+.ccomp{position:relative;display:grid;gap:6px}
+.chat-wrap,.chat-wrap>*,.ccomp>*{min-width:0}
+.ccomp .nin>button{flex:none}
+.cimg{display:block;max-width:min(320px,100%);max-height:260px;margin-top:6px;border-radius:6px;cursor:zoom-in}
+.cgif{display:block;width:min(320px,100%);height:240px;margin-top:6px;border:0;border-radius:6px;background:#000}
+.nb .nt a{color:var(--ac);word-break:break-all}
+.gifp{position:absolute;bottom:calc(100% + 6px);left:0;right:0;max-width:520px;z-index:20;padding:8px;display:grid;gap:6px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,#151c2e,#0d121d);box-shadow:0 12px 30px #000a}
+.gifs{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;max-height:300px;overflow:auto}
+.gifs img{width:100%;height:90px;object-fit:cover;border-radius:4px;cursor:pointer;background:#000}
+.gifs img:hover{outline:2px solid var(--ac)}
+.chat-wrap.over .chl{outline:2px dashed var(--ac)}
 </style>
 </head>
 <body>
@@ -1296,6 +1307,8 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['4.6','2026-10-31',['Chat: send pictures with \uD83D\uDCCE, by pasting them or by dropping them in (GIF files stay animated if they\u2019re small)','Chat: tenor.com and giphy.com links and direct picture links show as the GIF or picture, like Discord','\uD83C\uDF9E GIF search in Chat through GIPHY (the Creator or an Administrator adds a free GIPHY key in Profile settings)','Administrators can now delete any chat message too']],
+  ['4.5.1','2026-10-31',['Chat: messages sit right under each other instead of spreading out when there are only a few']],
   ['4.5','2026-10-31',['New Chat tab: one shared chat for the mods. Messages arrive instantly, with an unread badge on the tab and a notice when you\u2019re on another tab','Only the newest 30 messages are kept, older ones are deleted','Delete your own messages (the Creator can delete any)']],
   ['4.4.1','2026-10-30',['AI Assist now learns from up to 200 validated and 200 denied messages per check (same word first) instead of 8 and 8','If that\u2019s too much for the model, it retries with 40 and 40']],
   ['4.4','2026-10-29',['Live updates: new reports, deleted reports and status changes show up instantly. Firebase sends only what changed, instead of the dashboard downloading every report every 20 seconds','The header says Live \u00B7 instant while it\u2019s connected. If the live connection drops, it reconnects by itself and uses the old 20-second refresh meanwhile','New-report notices, the sound and desktop notifications now arrive instantly too, even in a background tab']],
@@ -1783,6 +1796,7 @@ function renderProf(main){
         h('span',{className:'knob'}),h('span',{textContent:'Protect me from Administrator actions'})),
       h('small',{className:'mu',textContent:'When off, Administrators can act on your profile like anyone else’s.'})]:[]),
     ...(isCreator(me.k)?evidenceBox():[]),
+    ...(canManage()?giphyBox():[]),
     h('b',{textContent:'Reviewing'}),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking one'),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:ls('ping')==='1',onchange:e=>{ls('ping',e.target.checked?'1':'0');if(e.target.checked)ping()}}),'Play a sound when new reports come in'),
@@ -2015,7 +2029,7 @@ function chatNew(before){
   const fresh=chatList().filter(([k,m])=>!before.has(k)&&m.by!==me?.k);
   if(view==='chat'){chatSeenNow();paintChat()}
   else if(fresh.length&&chInit){const[,m]=fresh.at(-1);
-    toast(`💬 ${P[m.by]?.displayName||m.byName||m.by}: ${m.text.slice(0,120)}`,{action:'Open',ms:6000,onAction:()=>go('chat')});
+    toast(`💬 ${P[m.by]?.displayName||m.byName||m.by}: ${m.text?m.text.slice(0,120):'sent a picture'}`,{action:'Open',ms:6000,onAction:()=>go('chat')});
     if(ls('ping')==='1')ping()}
   paintNav()}
 async function loadChat(){
@@ -2040,37 +2054,103 @@ function startChatStream(){
   es.addEventListener('patch',e=>on(e,true));
   es.addEventListener('cancel',()=>{chLive=false;try{es.close()}catch{};chRetry=setTimeout(startChatStream,30000)});
   es.onerror=()=>{chLive=false;if(es.readyState===2)chRetry=setTimeout(startChatStream,5000)}}
-async function sendChat(text){
-  text=String(text||'').trim().slice(0,500);if(!text)return false;
-  try{const r=await api('/chat','POST',{by:me.k,byName:P[me.k]?.displayName||me.k,text,t:{'.sv':'timestamp'}});
-    if(r?.name&&!CH[r.name])CH[r.name]={by:me.k,byName:P[me.k]?.displayName||me.k,text,t:Date.now()};
+async function sendChat(text,img){
+  text=String(text||'').trim().slice(0,500);if(!text&&!img)return false;
+  const msg={by:me.k,byName:P[me.k]?.displayName||me.k,text,...(img?{img}:{}),t:{'.sv':'timestamp'}};
+  try{const r=await api('/chat','POST',msg);
+    if(r?.name&&!CH[r.name])CH[r.name]={...msg,t:Date.now()};
     // keep only the newest 30
     const ks=Object.keys(await api('/chat','GET',undefined,'shallow=true')||{}).sort();
     if(ks.length>CHAT_KEEP){const up={};for(const k of ks.slice(0,ks.length-CHAT_KEEP)){up[k]=null;delete CH[k]}await api('/chat','PATCH',up).catch(()=>{})}
     chatSeenNow();paintChat();return true}
   catch(e){alert(e.message+(/denied/i.test(e.message)?'. Add the /chat rule in Firebase.':''));return false}}
+// Pictures for the chat: GIF files stay animated if they're small enough, everything else is shrunk to fit
+function chatPic(file){
+  if(!file||!/^image\//.test(file.type))return Promise.reject(new Error('Only pictures and GIFs can be sent.'));
+  if(file.type==='image/gif'&&file.size<350000)return new Promise((ok,bad)=>{const fr=new FileReader();fr.onload=()=>ok(fr.result);fr.onerror=()=>bad(new Error('Couldn’t read that GIF.'));fr.readAsDataURL(file)});
+  return shrinkImage(file,1024)}
+// Links that show as a picture or GIF in the chat (like Discord)
+const CHAT_IMG_HOST=/^https:\/\/(?:media\d*\.tenor\.com|c\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com|i\.imgur\.com|cdn\.discordapp\.com|media\.discordapp\.net)\//i;
+function chatEmbed(u){
+  let m;
+  if((m=/^https:\/\/(?:www\.)?tenor\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?view\/[^\s?#]*?-(\d{4,})(?:[?#]\S*)?$/i.exec(u)))return{frame:`https://tenor.com/embed/${m[1]}`};
+  if((m=/^https:\/\/(?:www\.)?giphy\.com\/(?:gifs|stickers)\/(?:[\w-]*-)?([A-Za-z0-9]{8,})\/?(?:[?#]\S*)?$/.exec(u)))return{img:`https://media.giphy.com/media/${m[1]}/giphy.gif`};
+  if(CHAT_IMG_HOST.test(u)||/^https:\/\/[^\s?#]+\.(?:gif|png|jpe?g|webp)(?:[?#]\S*)?$/i.test(u))return{img:u};
+  return null}
+function chatBody(m){
+  const out=[],text=m.text||'',urls=text.match(/https:\/\/[^\s<>"']+/g)||[],embeds=urls.map(chatEmbed).filter(Boolean).slice(0,4);
+  const onlyLink=urls.length===1&&text.trim()===urls[0]&&embeds.length===1;
+  if(text&&!onlyLink){const t=h('div',{className:'nt'});let last=0;
+    for(const u of urls){const i=text.indexOf(u,last);t.append(text.slice(last,i),h('a',{href:u,target:'_blank',rel:'noopener noreferrer',textContent:u}));last=i+u.length}
+    t.append(text.slice(last));out.push(t)}
+  const pic=src=>h('img',{className:'cimg',src,loading:'lazy',referrerPolicy:'no-referrer',title:'Click to zoom',onclick:()=>openZoom(src),
+    onerror(){this.replaceWith(h('small',{className:'mu',textContent:'(picture couldn’t load)'}))}});
+  if(m.img&&/^data:image\//.test(m.img))out.push(pic(m.img));
+  for(const e of embeds)out.push(e.img?pic(e.img):h('iframe',{className:'cgif',src:e.frame,loading:'lazy',referrerPolicy:'no-referrer',title:'GIF'}));
+  return out}
+const canDelChat=m=>m.by===me.k||canManage();
 function chatMsg([k,m]){
   const p=P[m.by],mine=m.by===me.k;
   return h('div',{className:'note'+(mine?' mine':'')},av(p||{displayName:m.byName},28),
     h('div',{className:'nb'},h('small',{},h('b',{textContent:p?.displayName||m.byName||m.by},roleTag(m.by)),h('span',{textContent:m.t?when(m.t):'',title:m.t?new Date(m.t).toLocaleString():''}),
-      ...(mine||isCreator(me.k)?[h('button',{className:'nx',textContent:'✕',title:mine?'Delete my message':'Delete this message',onclick:()=>{if(confirm('Delete this message?'))api('/chat/'+k,'DELETE').then(()=>{delete CH[k];paintChat()}).catch(e=>alert(e.message))}})]:[])),
-      h('div',{className:'nt',textContent:m.text})))}
+      ...(canDelChat(m)?[h('button',{className:'nx',textContent:'✕',title:mine?'Delete my message':'Delete this message',onclick:()=>{if(confirm('Delete this message?'))api('/chat/'+k,'DELETE').then(()=>{delete CH[k];paintChat()}).catch(e=>alert(e.message))}})]:[])),
+      ...chatBody(m)))}
 function paintChat(){
   const box=$('#chl');if(!box)return;
   const near=box.scrollHeight-box.scrollTop-box.clientHeight<60,l=chatList();
   box.replaceChildren(...(chErr&&!l.length?[h('p',{className:'bad',textContent:chErr+'. Add the /chat rule in Firebase.'})]
     :l.length?l.map(chatMsg):[h('small',{className:'mu',textContent:'No messages yet. Say hi to the other mods.'})]));
-  if(near||!paintChat.done){box.scrollTop=box.scrollHeight;paintChat.done=true}}
+  const down=()=>{box.scrollTop=box.scrollHeight};
+  if(near||!paintChat.done){down();paintChat.done=true;box.querySelectorAll('img').forEach(i=>{if(!i.complete)i.addEventListener('load',()=>{if(box.scrollHeight-box.scrollTop-box.clientHeight<400)down()},{once:true})})}}
+// ---------- GIF search (GIPHY). Tenor shut its search down for apps in 2026, but Tenor links still show in the chat. ----------
+let gifOpen=false;
+const giphyOn=()=>/^\w{20,}$/.test(SET.giphyKey||'');
+async function giphy(q){
+  const u=`https://api.giphy.com/v1/gifs/${q?'search':'trending'}?api_key=${encodeURIComponent(SET.giphyKey)}&limit=24&rating=pg-13${q?'&q='+encodeURIComponent(q):''}`;
+  const r=await fetch(u);if(!r.ok)throw new Error('GIPHY said HTTP '+r.status);
+  return((await r.json()).data||[]).map(g=>({prev:g.images?.fixed_height_small?.url||g.images?.preview_gif?.url,send:g.images?.downsized?.url||g.images?.original?.url,title:g.title||''})).filter(g=>g.prev&&g.send)}
+function gifPicker(onPick){
+  const res=h('div',{className:'gifs'}),q=h('input',{placeholder:'Search GIFs',spellcheck:false});
+  const box=h('div',{className:'gifp'},q,res,h('small',{className:'mu',textContent:'Powered by GIPHY · you can also paste a tenor.com or giphy.com link'}));
+  let tm=null;
+  const show=async()=>{res.replaceChildren(h('small',{className:'mu',textContent:'Loading...'}));
+    try{const l=await giphy(q.value.trim());res.replaceChildren(...(l.length?l.map(g=>h('img',{src:g.prev,title:g.title,loading:'lazy',referrerPolicy:'no-referrer',onclick:()=>onPick(g.send)})):[h('small',{className:'mu',textContent:'No GIFs found.'})]))}
+    catch(e){res.replaceChildren(h('small',{className:'bad',textContent:e.message}))}};
+  q.oninput=()=>{clearTimeout(tm);tm=setTimeout(show,350)};
+  q.onkeydown=e=>{if(e.key==='Escape'){gifOpen=false;box.remove()}};
+  setTimeout(()=>{q.focus();show()});return box}
+function giphyBox(){
+  const inp=h('input',{type:'text',placeholder:giphyOn()?'Paste a new key to replace it':'GIPHY API key',autocomplete:'off',spellcheck:false});inp.setAttribute('data-lpignore','true');
+  const save=h('button',{textContent:'Save key'});
+  save.onclick=async()=>{const k=inp.value.trim();if(!/^\w{20,}$/.test(k))return toast('That doesn’t look like a GIPHY API key.',{kind:'bad'});
+    save.disabled=true;try{await api('/settings','PATCH',{giphyKey:k});SET.giphyKey=k;toast('GIF search is on',{kind:'ok'});render()}catch(e){alert(e.message);save.disabled=false}};
+  return[h('b',{textContent:'GIF search in Chat (GIPHY)'}),
+    h('small',{className:'mu',textContent:giphyOn()?`Key saved (ends in …${SET.giphyKey.slice(-4)}). The 🎞 button in Chat searches GIPHY.`:'Get a free key at developers.giphy.com (Create an App → API) and paste it here to turn on the 🎞 GIF search in Chat. Tenor and GIPHY links work without it.'}),
+    h('div',{className:'mform'},inp,save)]}
 function renderChat(main){
   chatSeenNow();paintChat.done=false;
-  const ta=h('textarea',{placeholder:'Message the other mods... (Enter sends, Shift+Enter for a new line)',maxLength:500});
+  let pic=null;
+  const ta=h('textarea',{placeholder:'Message the other mods... (Enter sends, Shift+Enter for a new line, paste a picture or a GIF link)',maxLength:500});
+  const prev=h('div',{className:'npv',hidden:true});
+  const setPic=d=>{pic=d;prev.hidden=!d;prev.replaceChildren(...(d?[h('img',{src:d,onclick:()=>openZoom(d)}),h('button',{className:'nx',textContent:'✕',title:'Remove picture',onclick:()=>setPic(null)})]:[]))};
+  const addFile=async f=>{try{const d=await chatPic(f);if(d.length>480000)throw new Error('That picture is too big, even after shrinking.');setPic(d)}catch(e){alert(e.message)}};
+  const file=h('input',{type:'file',accept:'image/*',hidden:true,onchange:()=>{addFile(file.files[0]);file.value=''}});
   const send=h('button',{className:'nx2',textContent:'Send'});
-  const go1=async()=>{if(!ta.value.trim())return;send.disabled=ta.disabled=true;if(await sendChat(ta.value))ta.value='';send.disabled=ta.disabled=false;ta.focus()};
-  send.onclick=go1;ta.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();go1()}};
-  main.append(h('div',{className:'chat-wrap'},
+  const go1=async(gifUrl)=>{const t=gifUrl||ta.value;if(!String(t).trim()&&!pic)return;send.disabled=ta.disabled=true;
+    if(await sendChat(t,gifUrl?null:pic)){if(!gifUrl){ta.value='';setPic(null)}}send.disabled=ta.disabled=false;ta.focus()};
+  send.onclick=()=>go1();ta.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();go1()}};
+  ta.onpaste=e=>{const f=[...(e.clipboardData?.files||[])].find(f=>/^image\//.test(f.type));if(f){e.preventDefault();addFile(f)}};
+  const gb=h('button',{textContent:'🎞',title:'GIFs'}),comp=h('div',{className:'ccomp'});
+  gb.onclick=e=>{e.stopPropagation();if(!giphyOn())return toast(canManage()?'Add a GIPHY key in Profile settings to search GIFs. Pasting a tenor.com or giphy.com link works already.':'GIF search isn’t set up yet. Paste a tenor.com or giphy.com link instead.',{ms:7000});
+    const old=comp.querySelector('.gifp');if(old){old.remove();gifOpen=false;return}
+    gifOpen=true;comp.prepend(gifPicker(u=>{comp.querySelector('.gifp')?.remove();gifOpen=false;go1(u)}))};
+  comp.append(prev,h('div',{className:'nin'},h('button',{textContent:'📎',title:'Send a picture',onclick:()=>file.click()}),gb,file,ta,send));
+  const wrap=h('div',{className:'chat-wrap'},
     h('small',{className:'mu',textContent:`Only the newest ${CHAT_KEEP} messages are kept, older ones are deleted. Everyone signed in can read it.`}),
-    h('div',{className:'notes chl',id:'chl'}),
-    h('div',{className:'nin'},ta,send)));
+    h('div',{className:'notes chl',id:'chl'}),comp);
+  wrap.ondragover=e=>{e.preventDefault();wrap.classList.add('over')};wrap.ondragleave=()=>wrap.classList.remove('over');
+  wrap.ondrop=e=>{e.preventDefault();wrap.classList.remove('over');const f=e.dataTransfer.files[0];if(f)addFile(f)};
+  main.append(wrap);
   paintChat();setTimeout(()=>ta.focus())}
 // ---------- Live updates: Firebase pushes only what changed in /reports (new, changed or deleted), the moment it happens ----------
 let ES=null,esLive=false,esRetry=null,rcT=null;
