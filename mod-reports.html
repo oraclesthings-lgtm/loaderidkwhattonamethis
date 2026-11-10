@@ -337,6 +337,9 @@ header button{padding:7px 10px}
 .rlist{display:grid;gap:2px;max-height:300px;overflow:auto}
 .rlist .it{display:block;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:7px 9px}
 .rlist .it:hover{background:#ffffff12}
+#cpp{position:fixed;inset:0;z-index:60;background:#000a;display:grid;place-items:center;padding:16px}
+#cpp .pc{display:grid;gap:8px;width:min(420px,100%)}
+#cpp button.done{opacity:.6}
 </style>
 </head>
 <body>
@@ -639,7 +642,7 @@ async function buildPlayers(manual){
     await loadPlayers(true);
     toast(`Players list ready: ${Object.keys(out).length} player${Object.keys(out).length!==1?'s':''}`,{kind:'ok'})
   }catch(e){plErr=e.message;toast('Couldn’t save the players list: '+e.message+'. Add the /players rule in Firebase.',{kind:'bad',ms:9000})}
-  finally{plBuilding=false;if(!busy())render()}}
+  finally{plBuilding=false;softRender()}}
 // History -> one entry per report with its latest outcome
 function applyHist(rep,e){
   const x=rep[e.reportId]??={k:e.reportId,t:realT(e.reportId,e.t)};
@@ -710,7 +713,7 @@ function postEvidence(k,r){
   evQ=evQ.then(async()=>{
     try{
       const d=await src,blob=dataUrlBlob(d);if(!blob)return;
-      const ext=/png/.test(blob.type)?'png':'jpg',name=`report-${k}.${ext}`;
+      const ext=/png/.test(blob.type)?'png':'jpg',name=`r.${ext}`;  // short file name = shorter link
       const content=(`**${snap.displayName||snap.username||'?'}** (@${snap.username||'?'} · ${snap.userId??'?'})`+
         (snap.word?` · flagged for “${snap.word}”`:'')+` · validated by ${by}\n> ${String(snap.text||'').replace(/\n/g,' ')}`).slice(0,1900);
       const fd=new FormData();
@@ -751,10 +754,34 @@ async function copyInfo(text,p,btn){
   else if(btn){btn.disabled=true;btn.textContent='Getting links...'}
   const withShot=vs.map(x=>({...x,shot:shotOf(x)})).filter(x=>x.shot);
   const lines=[];let i=0;
-  for(const x of withShot){const u=await freshShot(p.id,x.k,x.shot);if(u)lines.push(`${++i}. “${x.word||'?'}” · ${x.t?new Date(x.t).toLocaleDateString():''}\n${u}`)}
+  for(const x of withShot){const u=await freshShot(p.id,x.k,x.shot);if(u)lines.push(`${++i}. ${x.word||'?'} ${shortLink(u)}`)}
   const miss=vs.length-i;
   if(btn){btn.disabled=false;btn.textContent='📋 Copy info'}
-  copyText(text+(lines.length?`\n\nValidated screenshots:\n${lines.join('\n')}`:'')+(miss?`\n(${miss} validated report${miss>1?'s have':' has'} no saved screenshot)`:''))}
+  const parts=splitDiscord(text,lines,miss?`(${miss} validated report${miss>1?'s have':' has'} no saved screenshot)`:'');
+  if(parts.length===1)return copyText(parts[0]);
+  copyParts(text,lines,miss)}
+// Discord links have to keep their ?ex=&is=&hm= signature or they stop working, so only the safe parts are trimmed
+const shortLink=u=>String(u).replace(/^https:\/\/media\.discordapp\.net\//,'https://cdn.discordapp.com/').replace(/&+$/,'');
+const discordMax=()=>ls('nitro')==='1'?4000:2000;
+// Splits the info into Discord-sized messages: the table and the first links, then the rest of the links
+function splitDiscord(text,lines,tail){
+  const max=discordMax(),parts=[];let cur=text+(lines.length?'\n\nValidated screenshots:':'');
+  for(const l of lines){if((cur+'\n'+l).length>max){parts.push(cur);cur=l}else cur+='\n'+l}
+  if(tail){if((cur+'\n'+tail).length>max){parts.push(cur);cur=tail}else cur+='\n'+tail}
+  parts.push(cur);return parts}
+// Too long for one Discord message: one Copy button per part
+function copyParts(text,lines,miss){
+  $('#cpp')?.remove();
+  const tail=miss?`(${miss} validated report${miss>1?'s have':' has'} no saved screenshot)`:'';
+  const box=h('div',{id:'cpp',onclick:e=>{if(e.target===box)box.remove()}}),inner=h('div',{className:'pc'});
+  const paint=()=>{const parts=splitDiscord(text,lines,tail);
+    inner.replaceChildren(h('b',{textContent:`Too long for one Discord message, so it\u2019s split in ${parts.length} parts`}),
+      h('small',{className:'mu',textContent:`Copy part 1, paste it in Discord, then copy the next one. Each part fits in ${discordMax()} characters.`}),
+      ...parts.map((t,n)=>{const b=h('button',{className:n?'':'nx2',textContent:`\uD83D\uDCCB Copy part ${n+1} of ${parts.length}`+(n?'':' (the table)')});
+        b.onclick=()=>{copyText(t);b.textContent=`\u2713 Copied part ${n+1} of ${parts.length}`;b.classList.add('done')};return b}),
+      h('label',{className:'chk'},h('input',{type:'checkbox',checked:ls('nitro')==='1',onchange:e=>{ls('nitro',e.target.checked?'1':'0');paint()}}),'I have Discord Nitro (4000 characters per message)'),
+      h('button',{textContent:'Close',onclick:()=>box.remove()}))};
+  paint();box.append(inner);document.body.append(box)}
 async function openShot(pid,k,shot){
   const w=window.open('about:blank','_blank');const u=await freshShot(pid,k,shot);
   if(u&&w)w.location=u;else{if(w)w.close();toast('That screenshot isn’t available anymore.',{kind:'bad'})}}
@@ -1049,30 +1076,78 @@ function tiles(s,hide,cls){
   return h('div',{className:'grid stats '+(cls||'')},...[['Resolved',s.resolved,'g'],['Denied',s.denied,'r'],['Valid',s.valid,'v'],['Today',s.today,'o'],['This month',s.month,'o'],['This year',s.year,'o'],['Lifetime',s.life,''],['Users resolved',s.uResolved,'g'],['Users denied',s.uDenied,'r'],['Users valid',s.uValid,'v']]
     .map(([l,v,c])=>h('div',{className:'stat '+c},h('div',{className:'n',textContent:hide?'nil':v}),h('small',{textContent:l}))))}
 
-const HEAD={};let headFail=0,headBusy=false;
+// ---------- Player headshots (Roblox thumbnails) ----------
+// Asked for only when an avatar is actually on screen, in small batches, one request at a time.
+// Faces are cached in this browser; ones Roblox is still drawing ("Pending") are retried, and if Roblox
+// says "too many requests" the loader waits and tries again instead of giving up.
+const HEAD={};
 try{Object.assign(HEAD,JSON.parse(ls('heads')||'{}'))}catch{}
+const HD={q:new Set(),tries:{},busy:false,wait:0,back:0,timer:null,saveT:null,
+  OK:12*36e5,NONE:36e5,BATCH:25,GAP:400,hosts:['https://thumbnails.roblox.com','https://thumbnails.roproxy.com']};
+const headFresh=id=>{const c=HEAD[id];return!!c&&Date.now()-c.t<(c.u?HD.OK:HD.NONE)};
+const headIO=typeof IntersectionObserver==='function'?new IntersectionObserver(es=>{
+  for(const e of es)if(e.isIntersecting){headIO.unobserve(e.target);headWant(e.target.dataset.hid)}},{rootMargin:'200px'}):null;
+function headWant(id){if(!id||headFresh(id))return;HD.q.add(id);headKick()}
+function headKick(ms=150){clearTimeout(HD.timer);HD.timer=setTimeout(headRun,Math.max(ms,HD.wait-Date.now()))}
+function headImg(id,sz,nm,u){
+  const st=`width:${sz}px;height:${sz}px;font-size:${sz/2}px`;
+  const img=h('img',{className:'av',style:st,src:u,loading:'lazy',referrerPolicy:'no-referrer'});
+  img.dataset.hid=id;img.dataset.sz=sz;img.dataset.nm=nm||'';
+  // The saved picture link went dead: show the letter and ask Roblox for a fresh one (once)
+  img.onerror=()=>{const fb=headLetter(id,sz,nm);img.replaceWith(fb);if(HEAD[id]?.u===u&&!HD.tries['e'+id]){HD.tries['e'+id]=1;delete HEAD[id];if(headIO)headIO.observe(fb);else headWant(id)}};
+  return img}
+function headLetter(id,sz,nm){
+  const d=h('div',{className:'av',style:`width:${sz}px;height:${sz}px;font-size:${sz/2}px`,textContent:(nm||'?')[0].toUpperCase()});
+  d.dataset.hid=id;d.dataset.sz=sz;d.dataset.nm=nm||'';return d}
 function head(id,sz,nm){
-  const st=`width:${sz}px;height:${sz}px;font-size:${sz/2}px`,fb=()=>h('div',{className:'av',style:st,textContent:(nm||'?')[0].toUpperCase()}),u=HEAD[String(id)]?.u;
-  return u?h('img',{className:'av',style:st,src:u,loading:'lazy',referrerPolicy:'no-referrer',onerror(){this.replaceWith(fb())}}):fb()}
-async function loadHeads(ids){
-  if(headBusy||Date.now()-headFail<60000)return;
-  const need=[...new Set(ids.map(String))].filter(id=>/^\d+$/.test(id)&&!(HEAD[id]&&Date.now()-HEAD[id].t<216e5));
-  if(!need.length)return;
-  headBusy=true;
-  try{
-    for(let i=0;i<need.length;i+=50){
-      const chunk=need.slice(i,i+50),q=`/v1/users/avatar-headshot?userIds=${chunk.join(',')}&size=150x150&format=Png&isCircular=true`;
-      let j=null;
-      // Roblox may block direct browser requests (CORS), so fall back to a public proxy of the same API
-      for(const host of ['https://thumbnails.roblox.com','https://thumbnails.roproxy.com']){
-        try{const r=await fetch(host+q);if(r.ok){j=await r.json();break}}catch{}
-      }
-      if(!j){headFail=Date.now();return}
-      for(const id of chunk)HEAD[id]={u:'',t:Date.now()};
-      for(const d of j.data||[])HEAD[d.targetId]={u:d.state==='Completed'&&/^https:\/\/[\w-]+\.rbxcdn\.com\//.test(d.imageUrl||'')?d.imageUrl:'',t:Date.now()}
-    }
-    ls('heads',JSON.stringify(HEAD));if(!busy())render()
-  }finally{headBusy=false}}
+  id=String(id??'');const ok=/^\d+$/.test(id),u=ok&&HEAD[id]?.u;
+  if(u){const im=headImg(id,sz,nm,u);if(!headFresh(id)){if(headIO)headIO.observe(im);else headWant(id)}return im}  // old picture shows right away, refreshed quietly once it's on screen
+  const d=headLetter(id,sz,nm);
+  if(ok&&!headFresh(id)){if(headIO)headIO.observe(d);else headWant(id)}
+  return d}
+// Swaps the letters on screen for the face, without redrawing the page
+function headPaint(id){
+  const u=HEAD[id]?.u;if(!u)return;
+  for(const el of document.querySelectorAll(`.av[data-hid="${id}"]`)){
+    if(el.tagName==='IMG'){if(el.src!==u)el.src=u}
+    else el.replaceWith(headImg(id,+el.dataset.sz||40,el.dataset.nm,u))}}
+function headSave(){
+  clearTimeout(HD.saveT);HD.saveT=setTimeout(()=>{
+    const now=Date.now();for(const k in HEAD)if(now-HEAD[k].t>3*864e5)delete HEAD[k];  // forget faces not seen for 3 days
+    try{ls('heads',JSON.stringify(HEAD))}catch{}},1500)}
+async function headRun(){
+  if(HD.busy||!HD.q.size)return;
+  if(Date.now()<HD.wait)return headKick();
+  HD.busy=true;
+  const chunk=[...HD.q].slice(0,HD.BATCH);for(const id of chunk)HD.q.delete(id);
+  const q=`/v1/users/avatar-headshot?userIds=${chunk.join(',')}&size=150x150&format=Png&isCircular=true`;
+  let j=null,limited=false,after=0;
+  // Roblox may block direct browser requests (CORS), so fall back to a public proxy of the same API
+  for(const host of [...(/^https:\/\/[\w.-]+$/.test(SET.thumbProxy||'')?[SET.thumbProxy]:[]),...HD.hosts]){
+    try{const r=await fetch(host+q);
+      if(r.ok){j=await r.json();break}
+      if(r.status===429){limited=true;after=Math.max(after,+r.headers.get('retry-after')||0)}}catch{}}
+  const now=Date.now();
+  if(!j){
+    // Nothing answered: put them back and wait (longer each time, up to 5 minutes)
+    for(const id of chunk)HD.q.add(id);
+    HD.back=Math.min(HD.back?HD.back*2:(limited?15000:8000),300000);
+    HD.wait=now+Math.max(HD.back,after*1000);
+  }else{
+    HD.back=0;
+    const got=new Map((j.data||[]).map(d=>[String(d.targetId),d]));
+    for(const id of chunk){
+      const d=got.get(id),url=d&&d.state==='Completed'&&/^https:\/\/[\w-]+\.rbxcdn\.com\//.test(d.imageUrl||'')?d.imageUrl:'';
+      if(url){HEAD[id]={u:url,t:now};delete HD.tries[id];headPaint(id)}
+      else if((!d||d.state==='Pending')&&(HD.tries[id]=(HD.tries[id]||0)+1)<=4)HD.q.add(id);  // Roblox is still drawing it: ask again
+      else{HEAD[id]={u:HEAD[id]?.u||'',t:HEAD[id]?.u?now-HD.OK+HD.NONE:now};delete HD.tries[id]}}  // blocked or no picture: try again in an hour
+    headSave();
+    if(chunk.some(id=>HD.q.has(id)))HD.wait=now+2500;
+  }
+  HD.busy=false;
+  if(HD.q.size)headKick(HD.GAP)}
+// Kept so older code can still hint which players are coming up; the loader decides when to ask
+function loadHeads(){}
 
 const MARKS=[['open','Unchecked'],['noted','Noted'],['valid','Valid'],['ai','AI valid'],['resolved','Resolved'],['denied','Denied']];
 const MCOL={open:'#3d4b6e',noted:'#8a5cf0',valid:'#1f9d55',ai:'#d4a017',resolved:'#14b8a6',denied:'#c23b3b'};
@@ -1196,7 +1271,7 @@ async function aiTick(){
     if(D[k])Object.assign(D[k],body,{ai:{...body.ai,t:Date.now()}});
     AIS.err='';AIS.done++;
     if(SET.aiErr)api('/settings','PATCH',{aiErr:null}).then(()=>{delete SET.aiErr}).catch(()=>{});
-    if(!busy())render()
+    softRender()
   }catch{}finally{AIS.busy=false}}
 setInterval(aiTick,5000);
 async function setAcs(v){try{await api('/settings','PATCH',{acs:v,acsAt:{'.sv':'timestamp'}});SET.acs=v;SET.acsAt=Date.now();render()}catch(e){alert(e.message)}}
@@ -1247,6 +1322,10 @@ function renderAi(main){
           h('div',{className:'msg',textContent:r.text}),h('div',{className:'msg',textContent:r.ai.reason||''})))
     })):h('p',{className:'mu',textContent:'Nothing checked yet. Only reports that arrive after the switch is on get checked.'}))}
 
+// A redraw that had to wait because you were typing in a box is done the moment you leave the box
+let renderDue=false;
+function softRender(){if(busy())renderDue=true;else{renderDue=false;render()}}
+document.addEventListener('focusout',()=>setTimeout(()=>{if(renderDue&&me&&!busy()){renderDue=false;render()}},60),true);
 const busy=()=>{const a=document.activeElement;return!!(a&&a.closest&&a.closest('#main')&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)&&a.type!=='checkbox')};
 const ago=t=>{if(!t)return'never';const x=Math.max(0,Math.round((Date.now()-t)/1000));return x<60?x+'s ago':x<3600?Math.round(x/60)+'m ago':Math.round(x/3600)+'h ago'};
 const BST={ok:['Online','ok'],hopping:['Hopping servers','ok'],disconnected:['Disconnected','bad'],stopped:['Stopped by hand','mu']};
@@ -1292,7 +1371,7 @@ function renderLaunch(main){
     // If the request is still waiting after 12s, the worker never picked it up
     setTimeout(async()=>{let left=null;try{left=key&&await api('/launcher/queue/'+key)}catch{}
       if(left){api('/launcher/queue/'+key,'DELETE').catch(()=>{});alert('The launcher worker didn\u2019t pick up the request, so it was cancelled. Check that launcher-worker.py is running (the newest version) and look at its window for errors.')}
-      loadLauncher().then(()=>{if(!busy())render()})},12000)};
+      loadLauncher().then(()=>{softRender()})},12000)};
   const launchBtn=n=>{const b=h('button',{textContent:'🚀 Launch',disabled:!online,title:online?'Launch into place '+(st.placeId||''):'Worker offline'});b.onclick=()=>send(b,[n]);return b};
   const multi=h('button',{textContent:`🚀 Launch selected (${lSel.size})`,disabled:!online||!lSel.size});multi.onclick=()=>send(multi,[...lSel]);
   const all=h('button',{textContent:lSel.size===names.length&&names.length?'Clear selection':'Select all',onclick:()=>{lSel=lSel.size===names.length?new Set():new Set(names);render()}});
@@ -1321,6 +1400,9 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['5.0','2026-11-10',['Staying in sync: profiles, settings and recent history are now live too, so kicks, bans, roles, History, stats, player counts and Player history update instantly instead of every 20 seconds','A live connection that went quiet (sleeping laptop, phone changing networks, coming back to the tab) is noticed, restarted, and everything is downloaded again','Updates that arrived while you were typing in a box now show the moment you click out of it (before, they waited for the next refresh)','Profiles are no longer downloaded in full every 20 seconds, which uses much less data','Optional: your own Cloudflare Worker for player faces (Profile settings, Creator)']],
+  ['4.9','2026-11-10',['Player faces load only when they\u2019re on screen, 25 at a time, instead of asking Roblox for everyone at once','Faces Roblox is still drawing are asked for again a few seconds later (before, they stayed a letter for 6 hours)','If Roblox says too many requests, the dashboard waits and tries again by itself','A face whose saved picture link went dead gets a fresh one','Faces pop in without redrawing the page, so the list no longer jumps while they load']],
+  ['4.8','2026-11-09',['\uD83D\uDCCB Copy info: when the screenshot links don\u2019t fit in one Discord message, it splits them into parts that do, with a Copy button for each (tick Nitro for 4000-character messages)','Screenshot links are shorter: one line each, and new screenshots get a short file name']],
   ['4.7','2026-10-31',['Share reports in Chat: \uD83D\uDCAC Share in chat in the report panel, or \uD83D\uDCC4 in the chat to pick a current report','Shared reports show as a card with the player, the word, the message and the screenshot. Click it to open the report (or the player in Player records once it\u2019s handled)','After the report is deleted, the screenshot still shows if it was saved to the evidence channel']],
   ['4.6','2026-10-31',['Chat: send pictures with \uD83D\uDCCE, by pasting them or by dropping them in (GIF files stay animated if they\u2019re small)','Chat: tenor.com and giphy.com links and direct picture links show as the GIF or picture, like Discord','\uD83C\uDF9E GIF search in Chat through GIPHY (the Creator or an Administrator adds a free GIPHY key in Profile settings)','Administrators can now delete any chat message too']],
   ['4.5.1','2026-10-31',['Chat: messages sit right under each other instead of spreading out when there are only a few']],
@@ -1812,6 +1894,7 @@ function renderProf(main){
       h('small',{className:'mu',textContent:'When off, Administrators can act on your profile like anyone else’s.'})]:[]),
     ...(isCreator(me.k)?evidenceBox():[]),
     ...(canManage()?giphyBox():[]),
+    ...(isCreator(me.k)?thumbBox():[]),
     h('b',{textContent:'Reviewing'}),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:autoNext(),onchange:e=>ls('autonext',e.target.checked?'1':'0')}),'Go to the next report after marking one'),
     h('label',{className:'chk'},h('input',{type:'checkbox',checked:ls('ping')==='1',onchange:e=>{ls('ping',e.target.checked?'1':'0');if(e.target.checked)ping()}}),'Play a sound when new reports come in'),
@@ -2064,9 +2147,10 @@ function startChatStream(){
   let es;try{es=new EventSource(`${DB}/chat.json`)}catch{return}
   chES=es;
   const on=(ev,patch)=>{let m;try{m=JSON.parse(ev.data)}catch{return}if(!m||typeof m.path!=='string')return;
-    const before=new Set(Object.keys(CH));chatApply(m.path,m.data,patch);chLive=true;chErr='';chatNew(before);chInit=true};
+    const before=new Set(Object.keys(CH));chatApply(m.path,m.data,patch);chLive=true;chAt=Date.now();chErr='';chatNew(before);chInit=true};
   es.addEventListener('put',e=>on(e,false));
   es.addEventListener('patch',e=>on(e,true));
+  es.addEventListener('keep-alive',()=>{chAt=Date.now()});
   es.addEventListener('cancel',()=>{chLive=false;try{es.close()}catch{};chRetry=setTimeout(startChatStream,30000)});
   es.onerror=()=>{chLive=false;if(es.readyState===2)chRetry=setTimeout(startChatStream,5000)}}
 async function sendChat(text,img,ref){
@@ -2168,6 +2252,19 @@ function gifPicker(onPick){
   q.oninput=()=>{clearTimeout(tm);tm=setTimeout(show,350)};
   q.onkeydown=e=>{if(e.key==='Escape'){gifOpen=false;box.remove()}};
   setTimeout(()=>{q.focus();show()});return box}
+// Optional: your own Cloudflare Worker for player faces (tried first, before Roblox and the public proxy)
+function thumbBox(){
+  const inp=h('input',{type:'text',placeholder:'https://your-worker.yourname.workers.dev',value:SET.thumbProxy||'',spellcheck:false});
+  const save=h('button',{textContent:'Save'});
+  save.onclick=async()=>{const u=inp.value.trim().replace(/\/+$/,'');
+    if(u&&!/^https:\/\/[\w.-]+$/.test(u))return toast('Paste just the Worker address, like https://faces.yourname.workers.dev',{kind:'bad'});
+    save.disabled=true;
+    try{if(u){const r=await fetch(u+'/v1/users/avatar-headshot?userIds=1&size=150x150&format=Png&isCircular=true');const j=await r.json();if(!Array.isArray(j.data))throw new Error('it didn\u2019t answer like the Roblox thumbnails API')}
+      await api('/settings','PATCH',{thumbProxy:u||null});if(u)SET.thumbProxy=u;else delete SET.thumbProxy;toast(u?'Face proxy saved and working':'Face proxy removed',{kind:'ok'});render()}
+    catch(e){toast('That Worker didn\u2019t work: '+e.message,{kind:'bad',ms:8000});save.disabled=false}};
+  return[h('b',{textContent:'Player faces proxy (Cloudflare Worker, optional)'}),
+    h('small',{className:'mu',textContent:SET.thumbProxy?'Faces are asked from your Worker first. Empty the box and Save to remove it.':'If you set up a Cloudflare Worker for Roblox faces, paste its address here. Faces are then asked from it first.'}),
+    h('div',{className:'mform'},inp,save)]}
 function giphyBox(){
   const inp=h('input',{type:'text',placeholder:giphyOn()?'Paste a new key to replace it':'GIPHY API key',autocomplete:'off',spellcheck:false});inp.setAttribute('data-lpignore','true');
   const save=h('button',{textContent:'Save key'});
@@ -2208,7 +2305,7 @@ function renderChat(main){
   main.append(wrap);
   paintChat();setTimeout(()=>ta.focus())}
 // ---------- Live updates: Firebase pushes only what changed in /reports (new, changed or deleted), the moment it happens ----------
-let ES=null,esLive=false,esRetry=null,rcT=null;
+let ES=null,esLive=false,esRetry=null,rcT=null,esAt=0,chAt=0;
 function setPath(parts,v){
   const k=parts[0];
   if(parts.length===1){if(v==null)delete D[k];else D[k]=v;return}
@@ -2217,7 +2314,7 @@ function setPath(parts,v){
   const last=parts[parts.length-1];if(v==null)delete o[last];else o[last]=v}
 function reportsChanged(){
   clearTimeout(rcT);
-  rcT=setTimeout(()=>{newReportCheck();if(sel&&!D[sel])closeSide();else if(!busy())render()},120)}
+  rcT=setTimeout(()=>{newReportCheck();if(sel&&!D[sel])closeSide();else softRender()},120)}
 function startStream(){
   if(!me||typeof EventSource!=='function')return;
   clearTimeout(esRetry);try{ES&&ES.close()}catch{}
@@ -2230,18 +2327,54 @@ function startStream(){
     if(patch){for(const[sub,v]of Object.entries(m.data||{}))setPath([...parts,...sub.split('/').filter(Boolean)],v)}
     else if(!parts.length)D=m.data&&typeof m.data==='object'?m.data:{};
     else setPath(parts,m.data);
-    esLive=true;loaded=true;lastLoad=Date.now();if(stBad)stat('Live');reportsChanged()};
+    esLive=true;esAt=Date.now();loaded=true;lastLoad=Date.now();if(stBad)stat('Live');reportsChanged()};
   es.addEventListener('put',e=>on(e,false));
   es.addEventListener('patch',e=>on(e,true));
-  es.addEventListener('keep-alive',()=>{lastLoad=Date.now()});
+  es.addEventListener('keep-alive',()=>{lastLoad=esAt=Date.now()});
   es.addEventListener('cancel',()=>{esLive=false;try{es.close()}catch{};esRetry=setTimeout(startStream,30000)});  // refused by the rules: back to polling, try again later
   es.onerror=()=>{esLive=false;if(es.readyState===2)esRetry=setTimeout(startStream,5000)}}  // the browser reconnects by itself; if it gave up, start again
+// ---------- More live data: profiles, settings and recent history are pushed the same way ----------
+// (so kicks, bans, roles, settings, History, stats and player records don't wait for the 20-second refresh)
+const LV={};
+function mirror(name,qs,get,set,changed){
+  const st=LV[name]??={live:false,at:0,es:null,retry:null};
+  if(!me||typeof EventSource!=='function')return;
+  clearTimeout(st.retry);try{st.es&&st.es.close()}catch{}
+  let es;try{es=new EventSource(`${DB}/${name}.json${qs?'?'+qs:''}`)}catch{return}
+  st.es=es;st.at=Date.now();
+  const on=(ev,patch)=>{let m;try{m=JSON.parse(ev.data)}catch{return}if(!m||typeof m.path!=='string')return;
+    const parts=m.path.split('/').filter(Boolean);
+    const put=(ps,v)=>{if(!ps.length){set(v&&typeof v==='object'?v:{});return}
+      let o=get();for(const k of ps.slice(0,-1)){if(o[k]==null||typeof o[k]!=='object'){if(v==null)return;o[k]={}}o=o[k]}
+      if(v==null)delete o[ps.at(-1)];else o[ps.at(-1)]=v};
+    if(patch)for(const[sub,v]of Object.entries(m.data||{}))put([...parts,...sub.split('/').filter(Boolean)],v);else put(parts,m.data);
+    st.live=true;st.at=Date.now();clearTimeout(st.t);st.t=setTimeout(changed,120)};
+  es.addEventListener('put',e=>on(e,false));es.addEventListener('patch',e=>on(e,true));
+  es.addEventListener('keep-alive',()=>{st.at=Date.now()});
+  es.addEventListener('cancel',()=>{st.live=false;try{es.close()}catch{};st.retry=setTimeout(()=>MIRRORS[name](),30000)});
+  es.onerror=()=>{st.live=false;if(es.readyState===2)st.retry=setTimeout(()=>MIRRORS[name](),5000)}}
+const isLive=n=>!!LV[n]?.live;
+const MIRRORS={
+  profiles:()=>mirror('profiles','',()=>P,v=>{P=v},()=>{if(me&&guard(P[me.k]))return;paintNav();softRender();if(sel)paintSide()}),
+  settings:()=>mirror('settings','',()=>SET,v=>{SET=v},()=>softRender()),
+  history:()=>mirror('history','orderBy=%22%24key%22&limitToLast=200',()=>H,v=>{H=v;hErr=false},()=>{softRender();if(sel)paintSide()})};
+function startMirrors(){for(const n in MIRRORS)MIRRORS[n]()}
+// Watchdog: a live connection that went quiet (sleeping laptop, phone switching networks) is restarted and everything re-downloaded
+function syncCheck(force){
+  if(!me)return;const now=Date.now(),stale=t=>now-t>(force?40000:75000);let redo=false;
+  if(ES&&stale(esAt||0)){esLive=false;startStream();redo=true}
+  if(chES&&stale(chAt||0)){chLive=false;startChatStream();redo=true}
+  for(const n in MIRRORS)if(LV[n]?.es&&stale(LV[n].at)){LV[n].live=false;MIRRORS[n]();redo=true}
+  if(redo||force)load()}
+setInterval(()=>syncCheck(false),15000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncCheck(true)});
+addEventListener('online',()=>syncCheck(true));
 async function loadInner(){
   if(!me)return;
   // Reports come in live through the stream; this full download is only the fallback when the stream is down
   if(!esLive){try{D=await api('/reports')||{};stat('Live');loaded=true;lastLoad=Date.now()}catch(e){stat(e.message,1);if(!loaded)render();return}
     newReportCheck()}
-  try{P=await api('/profiles')||{}}catch{}
+  if(!isLive('profiles')){try{P=await api('/profiles')||{}}catch{}}
   if(guard(P[me.k]))return;
   try{B=await api('/broadcasts')||{}}catch{}
   await loadReporters();
@@ -2249,13 +2382,13 @@ async function loadInner(){
   if(view==='mod')await loadMod();
   if(view==='brep')await loadBrep();
   checkWarns();
-  try{SET=await api('/settings')||{}}catch{}
+  if(!isLive('settings')){try{SET=await api('/settings')||{}}catch{}}
   try{NOTED=new Set(Object.keys(await api('/notes','GET',undefined,'shallow=true')||{}))}catch{}
-  await loadHist();
+  if(!isLive('history'))await loadHist();
   if((view==='home'||view==='all'||(view==='plist'&&!usingList()))&&Date.now()-lastStats>60000)await loadStats();
   if(view==='plist'||(view==='afr'&&user&&SET.playersBuilt))await loadPlayers();
   if(view==='launch')await loadLauncher();
-  if(sel&&!D[sel])closeSide();else if(!busy())render()}
+  if(sel&&!D[sel])closeSide();else softRender()}
 
 $('#rf').onclick=load;$('#obh').onclick=startOb;$('#ex').onclick=exportValid;$('#rv').onclick=resolveAllValid;$('#q').oninput=render;
 $('#back').onclick=backToGrid;
@@ -2278,7 +2411,7 @@ addEventListener('click',()=>{if(fOpen){fOpen=false;paintFlt()}if(bOpen){bOpen=f
 setInterval(load,20000);
 setInterval(()=>{if(!document.hidden&&me&&view==='launch')loadLauncher().then(()=>{if(view==='launch'&&!busy())render()})},5000);
 setInterval(()=>{const n=$('#dl');if(n&&pend[sel])n.textContent=dlText(sel);paintCd();
-  if(!stBad&&lastLoad&&!loading){const x=Date.now()-lastLoad;$('#st').textContent=esLive?'Live \u00B7 instant':'Live \u00B7 '+(x<5000?'just now':ago(lastLoad))}},1000);
+  if(!stBad&&lastLoad&&!loading){const x=Date.now()-lastLoad;$('#st').textContent=esLive?(isLive('profiles')&&isLive('settings')&&isLive('history')?'Live \u00B7 instant':'Live \u00B7 reports instant'):'Live \u00B7 '+(x<5000?'just now':ago(lastLoad))}},1000);
 function paintCd(){
   const ks=Object.keys(pend),c=$('#cd');if(!c)return;
   if(ks.length<2){c.hidden=true;return}
@@ -2293,7 +2426,7 @@ function enter(k,rec,kn){
   if(banOn(rec.ban)){ls('me',null);showLogin();return err(banMsg(rec.ban))}
   kn??=rec.kickN||0;
   if((rec.kickN||0)>kn){ls('me',null);showLogin();return err(kickMsg(rec.kick)+' Sign in again.')}
-  me={k,kn};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass,kn}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load();startStream();startChatStream();obCheck(k,rec)}
+  me={k,kn};P[k]=rec;ls('me',JSON.stringify({k,h:rec.pass,kn}));$('#login').hidden=true;$('#app').hidden=false;render();paintFlt();load();startStream();startChatStream();startMirrors();obCheck(k,rec)}
 function signout(){ls('me',null);location.reload()}
 function showLogin(){$('#login').hidden=false;const m=ls('kickmsg');if(m){ls('kickmsg',null);err(m)}}
 $('#mk').onclick=()=>setMode(mode==='in'?'new':'in');
