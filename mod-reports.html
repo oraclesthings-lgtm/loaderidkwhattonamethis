@@ -592,7 +592,7 @@ function renderAfr(main){
     main.append(h('div',{className:'tl',style:'margin-bottom:14px;flex-wrap:wrap'},head(g.id,48,g.name||g.user),h('h2',{style:'margin:0;flex:1',textContent:`${g.name||g.user} (@${g.user})`}),
       nv?h('div',{style:'min-width:300px'},dlPicker(()=>Object.entries(D).filter(([k,r])=>r.status==='valid'&&String(r.userId??r.username)===gid),`valid-reports-${g.user||g.id}`,`⬇ Download all valid (${nv})`)):''),playerCard(g),h('div',{className:'grid'},...g.list.map(r=>
       h('button',{className:`tile s-${markOf(r)}${r.k===sel?' sel':''}`,onclick:()=>openSide(r.k)},
-        h('small',{className:'trow'},h('span',{className:'tlbl',textContent:(r.word?`Flagged: ${r.word}`:'')+(isBlocked(ridOf(r))?' · 🚫 blocked reporter':'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),
+        h('small',{className:'trow'},h('span',{className:'tlbl',textContent:(r.word?`Flagged: ${r.word}`:'')+(isBlocked(ridOf(r))?' · 🚫 blocked reporter':'')+(r.selfResolved?' · ✋ reporter says resolved':'')+(pend[r.k]?` (deleting in ${Math.max(0,Math.ceil((pend[r.k].at-Date.now())/1000))}s)`:'')}),
           h('span',{className:'tm2',textContent:ago(pushTime(r.k)),title:new Date(pushTime(r.k)).toLocaleString()})),
         h('div',{className:'msg'},hl(r.text,r.word))))),
       ...(pp=>[h('h2',{className:'sec',textContent:`Player history (${pp.reps.length})`}),
@@ -950,6 +950,8 @@ function paintSide(){
     ...(/^\d+$/.test(String(r.userId))?[h('a',{className:'plink',href:`https://www.roblox.com/users/${r.userId}/profile`,target:'_blank',rel:'noopener noreferrer',textContent:'Open Roblox profile \u2197'})]:[]),
     h('div',{className:'f'},h('small',{textContent:'Message'+(r.word?` (flagged for \u201C${r.word}\u201D)`:'')}),h('div',{className:'m'},hl(r.text,r.word))),
     ...(r.ai?[h('div',{className:'f'},h('small',{textContent:'AI check'}),h('div',{className:'m',textContent:`${String(r.ai.verdict).toUpperCase()}: ${r.ai.reason||''}`}))]:[]),
+    ...(r.selfResolved?[h('div',{className:'f'},h('small',{textContent:'Reporter says'}),h('span',{className:'tag wn',style:'margin-left:0',textContent:'\u270B Already resolved'}),
+      h('small',{className:'mu',textContent:' The reporter marked this as dealt with'+(typeof r.selfResolved==='number'?' '+ago(r.selfResolved):'')+'. It doesn\u2019t count as valid or resolved until a mod marks it.'}))]:[]),
     sentBy(r),
     h('div',{className:'f'},h('small',{textContent:'Notes'}),notesBox(sel)),
     h('div',{className:'acts'},sb('resolved','ok','✅ Resolved','Resolved'),sb('denied','no','❌ Denied','Denied'),
@@ -1400,6 +1402,7 @@ function renderLaunch(main){
       :h('p',{className:'mu',textContent:'No launches yet.'}))}
 
 const CHANGES=[
+  ['5.1','2026-11-11',['Reporter says resolved: reporters can mark their own report as already dealt with from their scanner\u2019s My dashboard. It shows as \u270B on the report tile and in the report panel','It is only a note for the mods: the report stays open and doesn\u2019t count as valid or resolved until a mod marks it']],
   ['5.0','2026-11-10',['Staying in sync: profiles, settings and recent history are now live too, so kicks, bans, roles, History, stats, player counts and Player history update instantly instead of every 20 seconds','A live connection that went quiet (sleeping laptop, phone changing networks, coming back to the tab) is noticed, restarted, and everything is downloaded again','Updates that arrived while you were typing in a box now show the moment you click out of it (before, they waited for the next refresh)','Profiles are no longer downloaded in full every 20 seconds, which uses much less data','Optional: your own Cloudflare Worker for player faces (Profile settings, Creator)']],
   ['4.9','2026-11-10',['Player faces load only when they\u2019re on screen, 25 at a time, instead of asking Roblox for everyone at once','Faces Roblox is still drawing are asked for again a few seconds later (before, they stayed a letter for 6 hours)','If Roblox says too many requests, the dashboard waits and tries again by itself','A face whose saved picture link went dead gets a fresh one','Faces pop in without redrawing the page, so the list no longer jumps while they load']],
   ['4.8','2026-11-09',['\uD83D\uDCCB Copy info: when the screenshot links don\u2019t fit in one Discord message, it splits them into parts that do, with a Copy button for each (tick Nitro for 4000-character messages)','Screenshot links are shorter: one line each, and new screenshots get a short file name']],
